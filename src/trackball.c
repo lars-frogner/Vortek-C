@@ -2,7 +2,6 @@
 
 #include "renderer.h"
 #include "transform.h"
-#include "utils.h"
 
 #include <math.h>
 

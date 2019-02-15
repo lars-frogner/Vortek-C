@@ -1,7 +1,10 @@
 #include "renderer.h"
 
 #include "gl_includes.h"
+#include "transform.h"
 #include "utils.h"
+#include "io.h"
+#include "extra_math.h"
 
 #include <stdlib.h>
 #include <math.h>

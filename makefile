@@ -24,7 +24,7 @@ COMPILER = cc
 EXECUTABLE_NAME = main.x
 EXECUTABLE_LINK = ./${EXECUTABLE_NAME}
 EXECUTABLE = ${BUILD_PATH}/${EXECUTABLE_NAME}
-OBJECT_FILES = ${OBJ_PATH}/main.o ${OBJ_PATH}/window.o ${OBJ_PATH}/renderer.o ${OBJ_PATH}/trackball.o ${OBJ_PATH}/transform.o ${OBJ_PATH}/utils.o
+OBJECT_FILES = ${OBJ_PATH}/main.o ${OBJ_PATH}/window.o ${OBJ_PATH}/renderer.o ${OBJ_PATH}/trackball.o ${OBJ_PATH}/transform.o ${OBJ_PATH}/utils.o ${OBJ_PATH}/io.o ${OBJ_PATH}/extra_math.o
 
 COMPILATION_FLAGS = -Wno-deprecated-declarations
 LINKING_FLAGS = -framework OpenGL
@@ -67,24 +67,32 @@ ${OBJ_PATH}/main.o: ${SRC_PATH}/main.c ${INCLUDE_PATH}/window.h ${INCLUDE_PATH}/
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/main.c -o ${OBJ_PATH}/main.o
 
 # Rule for compiling window.c
-${OBJ_PATH}/window.o: ${INCLUDE_PATH}/window.h ${SRC_PATH}/window.c ${INCLUDE_PATH}/renderer.h ${INCLUDE_PATH}/trackball.h ${INCLUDE_PATH}/utils.h
+${OBJ_PATH}/window.o: ${INCLUDE_PATH}/window.h ${SRC_PATH}/window.c ${INCLUDE_PATH}/renderer.h ${INCLUDE_PATH}/trackball.h ${INCLUDE_PATH}/io.h
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/window.c -o ${OBJ_PATH}/window.o
 
 # Rule for compiling renderer.c
-${OBJ_PATH}/renderer.o: ${INCLUDE_PATH}/renderer.h ${SRC_PATH}/renderer.c ${INCLUDE_PATH}/gl_includes.h ${INCLUDE_PATH}/transform.h ${INCLUDE_PATH}/utils.h
+${OBJ_PATH}/renderer.o: ${INCLUDE_PATH}/renderer.h ${SRC_PATH}/renderer.c ${INCLUDE_PATH}/gl_includes.h ${INCLUDE_PATH}/transform.h ${INCLUDE_PATH}/utils.h ${INCLUDE_PATH}/io.h ${INCLUDE_PATH}/extra_math.h
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/renderer.c -o ${OBJ_PATH}/renderer.o
 
 # Rule for compiling trackball.c
-${OBJ_PATH}/trackball.o: ${INCLUDE_PATH}/trackball.h ${SRC_PATH}/trackball.c ${INCLUDE_PATH}/transform.h ${INCLUDE_PATH}/utils.h
+${OBJ_PATH}/trackball.o: ${INCLUDE_PATH}/trackball.h ${SRC_PATH}/trackball.c ${INCLUDE_PATH}/renderer.h ${INCLUDE_PATH}/transform.h
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/trackball.c -o ${OBJ_PATH}/trackball.o
 
 # Rule for compiling transform.c
-${OBJ_PATH}/transform.o: ${INCLUDE_PATH}/transform.h ${SRC_PATH}/transform.c ${INCLUDE_PATH}/utils.h
+${OBJ_PATH}/transform.o: ${INCLUDE_PATH}/transform.h ${SRC_PATH}/transform.c ${INCLUDE_PATH}/extra_math.h
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/transform.c -o ${OBJ_PATH}/transform.o
 
 # Rule for compiling utils.c
-${OBJ_PATH}/utils.o: ${INCLUDE_PATH}/utils.h ${SRC_PATH}/utils.c ${INCLUDE_PATH}/gl_includes.h
+${OBJ_PATH}/utils.o: ${INCLUDE_PATH}/utils.h ${SRC_PATH}/utils.c ${INCLUDE_PATH}/gl_includes.h ${INCLUDE_PATH}/io.h
 	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/utils.c -o ${OBJ_PATH}/utils.o
+
+# Rule for compiling io.c
+${OBJ_PATH}/io.o: ${INCLUDE_PATH}/io.h ${SRC_PATH}/io.c
+	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/io.c -o ${OBJ_PATH}/io.o
+
+# Rule for compiling extra_math.c
+${OBJ_PATH}/extra_math.o: ${INCLUDE_PATH}/extra_math.h ${SRC_PATH}/extra_math.c
+	$(COMPILER) -c $(EXTRA_FLAGS) $(COMPILATION_FLAGS) $(HEADER_PATH_FLAGS) ${SRC_PATH}/extra_math.c -o ${OBJ_PATH}/extra_math.o
 
 # Action for removing all auxiliary files
 clean:
