@@ -20,7 +20,7 @@ GLuint load_shader_from_file(const char* filename, GLenum shader_type)
 {
     GLuint shader_id = 0;
 
-    char* source_string = read_file(filename, ASCII);
+    char* source_string = read_text_file(filename);
 
     if (source_string)
     {
