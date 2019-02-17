@@ -1,9 +1,16 @@
 #version 400
 
-in vec4 ex_color;
+in vec3 ex_tex_coord;
 out vec4 out_color;
 
-void main()
+uniform sampler3D texture0;
+
+void main(void)
 {
-    out_color = ex_color;
+    float intensity;
+    intensity = texture(texture0, ex_tex_coord).r;
+    out_color.x = intensity;
+    out_color.y = intensity;
+    out_color.z = intensity;
+    out_color.w = intensity;
 }
