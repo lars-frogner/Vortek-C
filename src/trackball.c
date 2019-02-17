@@ -1,7 +1,8 @@
 #include "trackball.h"
 
-#include "renderer.h"
+#include "error.h"
 #include "transform.h"
+#include "renderer.h"
 
 #include <math.h>
 
@@ -22,6 +23,8 @@ static Vector3 previous_trackball_point = {{0}};
 
 void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, int screen_height)
 {
+    assert(screen_height > 0);
+
     double x, y;
     screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_height, &x, &y);
     previous_trackball_point = compute_trackball_point(x, y);
@@ -29,6 +32,8 @@ void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, 
 
 void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y, int screen_height)
 {
+    assert(screen_height > 0);
+
     double x, y;
     screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_height, &x, &y);
     const Vector3 current_trackball_point = compute_trackball_point(x, y);
@@ -67,9 +72,9 @@ static double compute_trackball_pick_depth(double x, double y)
 
     // Project to sphere if close to center or hyperbolic surface otherwise
     if (squared_2D_radius <= squared_2D_radius_limit)
-        z = sqrtf(squared_trackball_radius - squared_2D_radius);
+        z = sqrt(squared_trackball_radius - squared_2D_radius);
     else
-        z = squared_2D_radius_limit/sqrtf(squared_2D_radius);
+        z = squared_2D_radius_limit/sqrt(squared_2D_radius);
 
     return z;
 }
@@ -78,6 +83,10 @@ static void screen_coords_to_trackball_coords(double screen_coord_x, double scre
                                               int screen_height,
                                               double* x, double* y)
 {
+    assert(screen_height > 0);
+    assert(x);
+    assert(y);
+
     const double scale = 2.0/screen_height;
     *x = -1.0 + scale*screen_coord_x;
     *y =  1.0 - scale*screen_coord_y;
