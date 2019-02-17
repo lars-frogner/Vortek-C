@@ -1,5 +1,7 @@
 #include "extra_math.h"
 
+#include "error.h"
+
 #include <math.h>
 
 
@@ -16,12 +18,12 @@ int min(int a, int b)
     return (a <= b) ? a : b;
 }
 
-unsigned int umax(unsigned int a, unsigned int b)
+size_t max_size(size_t a, size_t b)
 {
     return (a >= b) ? a : b;
 }
 
-unsigned int umin(unsigned int a, unsigned int b)
+size_t min_size(size_t a, size_t b)
 {
     return (a >= b) ? a : b;
 }
@@ -45,15 +47,17 @@ int signum(float x)
 
 float cotangent(float angle)
 {
-  return (float)(1.0/tanf(angle));
+    const float tan_angle = tanf(angle);
+    assert(tan_angle != 0.0f);
+    return 1.0f/tan_angle;
 }
 
 float degrees_to_radians(float degrees)
 {
-  return degrees*(float)(PI/180);
+    return degrees*(float)(PI/180);
 }
 
 float radians_to_regrees(float radians)
 {
-  return radians*(float)(180/PI);
+    return radians*(float)(180/PI);
 }
