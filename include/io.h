@@ -1,18 +1,18 @@
 #ifndef IO_H
 #define IO_H
 
+#include <stddef.h>
+
 typedef struct FloatField
 {
     float* data;
-    unsigned int size_x;
-    unsigned int size_y;
-    unsigned int size_z;
+    size_t size_x;
+    size_t size_y;
+    size_t size_z;
+    float min_value;
+    float max_value;
 
 } FloatField;
-
-
-void print_info(const char* message, ...);
-void print_error(const char* message, ...);
 
 char* read_text_file(const char* filename);
 
