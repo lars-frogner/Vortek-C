@@ -63,19 +63,6 @@ void load_textures(const ShaderProgram* shader_program)
     set_field_texture_uniforms(shader_program);
 }
 
-void bind_textures(void)
-{
-    unsigned int i;
-    for (i = 0; i < texture_set.n_textures; i++)
-    {
-        glActiveTexture(GL_TEXTURE0 + texture_set.textures[i].unit);
-        abort_on_GL_error("Could not activate 3D texture for drawing");
-
-        glBindTexture(GL_TEXTURE_3D, texture_set.textures[i].id);
-        abort_on_GL_error("Could not bind 3D texture for drawing");
-    }
-}
-
 void cleanup_textures(void)
 {
     destroy_field_texture_set();
@@ -125,7 +112,7 @@ static void create_scalar_field_texture(FieldTexture* texture)
     glBindTexture(GL_TEXTURE_3D, texture->id);
     abort_on_GL_error("Could not bind 3D texture");
 
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glTexImage3D(GL_TEXTURE_3D,
@@ -140,6 +127,9 @@ static void create_scalar_field_texture(FieldTexture* texture)
                  (GLvoid*)texture->field.data);
     abort_on_GL_error("Could not define 3D texture image");
 
+    free(texture->field.data);
+    texture->field.data = NULL;
+
     GLint is_compressed;
     glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_COMPRESSED, &is_compressed);
     abort_on_GL_error("Could not determine compression state of 3D texture");
@@ -148,9 +138,6 @@ static void create_scalar_field_texture(FieldTexture* texture)
 
     glGenerateMipmap(GL_TEXTURE_3D);
     abort_on_GL_error("Could not generate mipmap for 3D texture");
-
-    free(texture->field.data);
-    texture->field.data = NULL;
 }
 
 static void set_field_texture_uniform(FieldTexture* texture, const ShaderProgram* shader_program)
