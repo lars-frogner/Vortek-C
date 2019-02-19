@@ -31,13 +31,13 @@ void initialize_renderer(void)
 
     glGetError();
 
-    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
-                                     "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_lowres.raw",
+                                     "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_lowres.dat");
     add_scalar_field_texture(&field);
 
     create_shader_program(&shader_program);
 
-    create_planes(&field, 2.0f);
+    create_planes(&field, 1.0f);
 
     create_transform_matrices(2.0f, 60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f);
 
@@ -96,6 +96,9 @@ void renderer_key_action_callback(void) {}
 
 static void initialize_rendering_settings(void)
 {
+    glDisable(GL_DEPTH_TEST);
+    abort_on_GL_error("Could not disable depth testing");
+
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
