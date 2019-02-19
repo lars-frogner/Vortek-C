@@ -1,5 +1,5 @@
-#include "window.h"
 #include "renderer.h"
+#include "window.h"
 
 
 int main(int argc, char const *argv[])

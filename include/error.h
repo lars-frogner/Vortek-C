@@ -6,6 +6,8 @@ void print_warning_message(const char* message, ...);
 void print_error_message(const char* message, ...);
 void print_severe_message(const char* message, ...);
 
+void abort_on_GL_error(const char* message);
+
 
 // Define check statement (always active)
 #define check(expression) \

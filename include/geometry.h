@@ -1,5 +1,5 @@
-#ifndef TRANSFORM_H
-#define TRANSFORM_H
+#ifndef GEOMETRY_H
+#define GEOMETRY_H
 
 typedef struct Vector2f
 {
@@ -77,7 +77,7 @@ Matrix4f create_rotation_about_x_transform(float angle);
 Matrix4f create_rotation_about_y_transform(float angle);
 Matrix4f create_rotation_about_z_transform(float angle);
 Matrix4f create_rotation_about_axis_transform(const Vector3f* axis, float angle);
-Matrix4f create_perspective_transform(float field_of_view_y, float aspect_ratio, float near_plane, float far_plane);
+Matrix4f create_perspective_transform(float vertical_field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance);
 
 void apply_scaling(Matrix4f* m, float sx, float sy, float sz);
 void apply_translation(Matrix4f* m, float dx, float dy, float dz);

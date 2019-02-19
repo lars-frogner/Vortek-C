@@ -1,4 +1,4 @@
-#include "transform.h"
+#include "geometry.h"
 
 #include "error.h"
 #include "extra_math.h"
@@ -376,23 +376,23 @@ Matrix4f create_rotation_about_axis_transform(const Vector3f* axis, float angle)
     return result;
 }
 
-Matrix4f create_perspective_transform(float field_of_view_y, float aspect_ratio, float near_plane, float far_plane)
+Matrix4f create_perspective_transform(float vertical_field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance)
 {
-    assert(field_of_view_y > 0 && field_of_view_y < 360.0f);
+    assert(vertical_field_of_view > 0 && vertical_field_of_view < 360.0f);
     assert(aspect_ratio > 0);
-    assert(near_plane > 0);
-    assert(far_plane > near_plane);
+    assert(near_plane_distance > 0);
+    assert(far_plane_distance > near_plane_distance);
 
     Matrix4f result = {{0}};
 
-    const float y_scale = cotangent(degrees_to_radians(field_of_view_y/2));
+    const float y_scale = cotangent(degrees_to_radians(vertical_field_of_view/2));
     const float x_scale = y_scale/aspect_ratio;
-    const float frustum_length = far_plane - near_plane;
+    const float frustum_length = far_plane_distance - near_plane_distance;
 
     result.a[ 0] = x_scale;
     result.a[ 5] = y_scale;
-    result.a[10] = -(far_plane + near_plane)/frustum_length;
-    result.a[11] = -(2*near_plane*far_plane)/frustum_length;
+    result.a[10] = -(far_plane_distance + near_plane_distance)/frustum_length;
+    result.a[11] = -(2*near_plane_distance*far_plane_distance)/frustum_length;
     result.a[14] = -1;
 
     return result;

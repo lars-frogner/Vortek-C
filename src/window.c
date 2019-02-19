@@ -1,10 +1,9 @@
 #include "window.h"
 
 #include "error.h"
-#include "trackball.h"
 #include "renderer.h"
+#include "trackball.h"
 
-#include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -90,13 +89,6 @@ void initialize_window(void)
     glfwSwapInterval(1);
 }
 
-void cleanup_window(void)
-{
-    check(window.handle);
-    glfwDestroyWindow(window.handle);
-    glfwTerminate();
-}
-
 void mainloop(void)
 {
     check(window.handle);
@@ -113,6 +105,13 @@ void mainloop(void)
     }
 }
 
+void cleanup_window(void)
+{
+    check(window.handle);
+    glfwDestroyWindow(window.handle);
+    glfwTerminate();
+}
+
 static void update_FPS(GLFWwindow* window_handle)
 {
     fps_counter.frame_count++;
@@ -122,7 +121,7 @@ static void update_FPS(GLFWwindow* window_handle)
     {
         const double fps = fps_counter.frame_count/duration;
         char title[40];
-        sprintf(title, "%s - %.0f FPS", WINDOW_TITLE, fps);
+        sprintf(title, "%s - %.1f FPS", WINDOW_TITLE, fps);
         glfwSetWindowTitle(window_handle, title);
 
         fps_counter.previous_time = current_time;
@@ -172,14 +171,12 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
         {
             double x_click_pos, y_click_pos;
             glfwGetCursorPos(window_handle, &x_click_pos, &y_click_pos);
-            print_info_message("Click %f, %f", x_click_pos, y_click_pos);
             trackball_leftclick_callback(x_click_pos, y_click_pos, window.height_screen_coords);
 
             mouse_is_pressed = 1;
         }
         else if (action == GLFW_RELEASE)
         {
-            print_info_message("Release");
             mouse_is_pressed = 0;
         }
     }

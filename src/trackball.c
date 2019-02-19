@@ -1,7 +1,8 @@
 #include "trackball.h"
 
 #include "error.h"
-#include "transform.h"
+#include "geometry.h"
+#include "transformation.h"
 #include "renderer.h"
 
 #include <math.h>
@@ -45,6 +46,7 @@ void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y,
     const float rotation_angle = (float)acos(dot3(&previous_trackball_point, &current_trackball_point));
 
     apply_model_rotation_about_axis(&rotation_axisf, rotation_angle);
+    sync_renderer();
 
     previous_trackball_point = current_trackball_point;
 }
@@ -54,6 +56,7 @@ void trackball_zoom_callback(double zoom_rate)
     const float scale = (float)exp(zoom_rate_modifier*zoom_rate);
     trackball_radius *= scale;
     apply_model_scaling(scale);
+    sync_renderer();
 }
 
 static Vector3 compute_trackball_point(double x, double y)

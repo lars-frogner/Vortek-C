@@ -3,19 +3,13 @@
 
 #include <stddef.h>
 
-typedef struct FloatField
-{
-    float* data;
-    size_t size_x;
-    size_t size_y;
-    size_t size_z;
-    float min_value;
-    float max_value;
-
-} FloatField;
+int is_little_endian(void);
 
 char* read_text_file(const char* filename);
+void* read_binary_file(const char* filename, size_t length, size_t element_size);
 
-FloatField read_bifrost_field(const char* data_filename, const char* header_filename);
+int find_int_entry_in_header(const char* header, const char* entry_name, const char* separator);
+float find_float_entry_in_header(const char* header, const char* entry_name, const char* separator);
+char find_char_entry_in_header(const char* header, const char* entry_name, const char* separator);
 
 #endif
