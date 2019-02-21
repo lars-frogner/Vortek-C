@@ -8,12 +8,12 @@
 const double PI = 3.14159265358979323846;
 
 
-int max(int a, int b)
+int imax(int a, int b)
 {
     return (a >= b) ? a : b;
 }
 
-int min(int a, int b)
+int imin(int a, int b)
 {
     return (a <= b) ? a : b;
 }
@@ -43,6 +43,11 @@ int sign(float x)
 int signum(float x)
 {
     return (x > 0) ? 1 : ((x < 0) ? -1 : 0);
+}
+
+float clamp(float x, float lower, float upper)
+{
+    return (x > lower) ? ((x < upper) ? x : upper) : lower;
 }
 
 float cotangent(float angle)

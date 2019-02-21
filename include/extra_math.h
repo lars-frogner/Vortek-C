@@ -5,8 +5,8 @@
 
 extern const double PI;
 
-int max(int a, int b);
-int min(int a, int b);
+int imax(int a, int b);
+int imin(int a, int b);
 
 size_t max_size(size_t a, size_t b);
 size_t min_size(size_t a, size_t b);
@@ -15,6 +15,8 @@ unsigned int argfmax3(float x, float y, float z);
 
 int sign(float x);
 int signum(float x);
+
+float clamp(float x, float lower, float upper);
 
 float cotangent(float angle);
 float degrees_to_radians(float degrees);
