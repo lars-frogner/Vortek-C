@@ -59,7 +59,7 @@ static void create_plane_buffers(unsigned int n_x_planes, unsigned int n_y_plane
 
 static void update_plane_buffer_data(float halfwidth, float halfheight, float halfdepth);
 
-static void update_face_set_lookup_tables();
+static void update_face_set_lookup_tables(void);
 
 static void update_active_plane_set_dimension_and_order(void);
 
@@ -67,14 +67,11 @@ static void update_active_plane_set_dimension_and_order(void);
 static PlaneSet plane_set;
 
 
-void create_planes(const Field* reference_field, float spacing_multiplier)
+void create_planes(size_t size_x, size_t size_y, size_t size_z,
+                   float extent_x, float extent_y, float extent_z,
+                   float spacing_multiplier)
 {
-    check(reference_field);
     assert(spacing_multiplier > 0);
-
-    const float extent_x = ((float)reference_field->size_x - 1.0f)*reference_field->dx;
-    const float extent_y = ((float)reference_field->size_y - 1.0f)*reference_field->dy;
-    const float extent_z = ((float)reference_field->size_z - 1.0f)*reference_field->dz;
 
     if (extent_x <= 0 || extent_y <= 0 || extent_z <= 0)
         print_severe_message("Cannot create new planes with zero or negative extent along any axis.");
@@ -85,9 +82,9 @@ void create_planes(const Field* reference_field, float spacing_multiplier)
     const float halfheight = scale*extent_y;
     const float halfdepth  = scale*extent_z;
 
-    const unsigned int n_x_planes = (unsigned int)(reference_field->size_x/spacing_multiplier);
-    const unsigned int n_y_planes = (unsigned int)(reference_field->size_y/spacing_multiplier);
-    const unsigned int n_z_planes = (unsigned int)(reference_field->size_z/spacing_multiplier);
+    const unsigned int n_x_planes = (unsigned int)(size_x/spacing_multiplier);
+    const unsigned int n_y_planes = (unsigned int)(size_y/spacing_multiplier);
+    const unsigned int n_z_planes = (unsigned int)(size_z/spacing_multiplier);
 
     if (n_x_planes < 2 || n_y_planes < 2 || n_z_planes < 2)
         print_severe_message("Cannot create fewer than two planes along any axis.");
