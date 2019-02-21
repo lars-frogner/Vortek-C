@@ -63,8 +63,8 @@ Field read_bifrost_field(const char* data_filename, const char* header_filename)
     if (order != 'C')
         print_severe_message("Field data must laid out row-major order.");
 
-    if (signed_size_x < 0 || signed_size_y < 0 || signed_size_z < 0)
-        print_severe_message("Field dimensions can not be negative.");
+    if (signed_size_x < 2 || signed_size_y < 2 || signed_size_z < 2)
+        print_severe_message("Field dimensions cannot smaller than 2 along any axis.");
 
     const size_t size_x = (size_t)signed_size_x;
     const size_t size_y = (size_t)signed_size_y;
@@ -76,12 +76,16 @@ Field read_bifrost_field(const char* data_filename, const char* header_filename)
 
     float* data = (float*)read_binary_file(data_filename, length, sizeof(float));
 
-    return create_field(SCALAR_FIELD, data, size_x, size_y, size_z, dx, dy, dz);
+    const float extent_x = (size_x - 1)*dx;
+    const float extent_y = (size_y - 1)*dy;
+    const float extent_z = (size_z - 1)*dz;
+
+    return create_field(SCALAR_FIELD, data, size_x, size_y, size_z, extent_x, extent_y, extent_z);
 }
 
 Field create_field(enum field_type type, float* data,
                    size_t size_x, size_t size_y, size_t size_z,
-                   float dx, float dy, float dz)
+                   float extent_x, float extent_y, float extent_z)
 {
     check(data);
 
@@ -92,9 +96,9 @@ Field create_field(enum field_type type, float* data,
     field.size_x = size_x;
     field.size_y = size_y;
     field.size_z = size_z;
-    field.dx = dx;
-    field.dy = dy;
-    field.dz = dz;
+    field.extent_x = extent_x;
+    field.extent_y = extent_y;
+    field.extent_z = extent_z;
 
     const size_t length = size_x*size_y*size_z*((type == VECTOR_FIELD) ? 3 : 1);
 
@@ -117,9 +121,9 @@ void reset_field(Field* field)
     field->size_x = 0;
     field->size_y = 0;
     field->size_z = 0;
-    field->dx = 0;
-    field->dy = 0;
-    field->dz = 0;
+    field->extent_x = 0;
+    field->extent_y = 0;
+    field->extent_z = 0;
     field->min_value = 0;
     field->max_value = 0;
 }

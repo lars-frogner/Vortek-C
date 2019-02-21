@@ -12,9 +12,9 @@ typedef struct Field
     size_t size_x;
     size_t size_y;
     size_t size_z;
-    float dx;
-    float dy;
-    float dz;
+    float extent_x;
+    float extent_y;
+    float extent_z;
     float min_value;
     float max_value;
 
@@ -24,7 +24,7 @@ Field read_bifrost_field(const char* data_filename, const char* header_filename)
 
 Field create_field(enum field_type type, float* data,
                    size_t size_x, size_t size_y, size_t size_z,
-                   float dx, float dy, float dz);
+                   float extent_x, float extent_y, float extent_z);
 
 void reset_field(Field* field);
 
