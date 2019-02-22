@@ -1,5 +1,7 @@
 .DS_Store
 *.x
-*.o
 *.sublime-project
 *.sublime-workspace
+external/
+obj/
+.d/
