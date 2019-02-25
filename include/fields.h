@@ -17,7 +17,8 @@ typedef struct Field
     float extent_z;
     float min_value;
     float max_value;
-
+    float lower_clip_value;
+    float upper_clip_value;
 } Field;
 
 Field read_bifrost_field(const char* data_filename, const char* header_filename);
@@ -27,6 +28,8 @@ Field create_field(enum field_type type, float* data,
                    float extent_x, float extent_y, float extent_z);
 
 void reset_field(Field* field);
+
+void clip_field_values(Field* field, float lower_clip_value, float upper_clip_value);
 
 float field_value_to_normalized_value(const Field* field, float field_value);
 float normalized_value_to_field_value(const Field* field, float normalized_value);

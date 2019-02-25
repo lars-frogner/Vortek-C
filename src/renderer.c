@@ -33,20 +33,32 @@ void initialize_renderer(void)
 
     glGetError();
 
-    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_lowres.raw",
-                                     "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_lowres.dat");
+    //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
+    //                                 "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
+                                     "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
+
+    clip_field_values(&field, 0.0f, field.max_value*0.04f);
 
     const unsigned int texture_id = add_scalar_field_texture(&field);
 
     const unsigned int TF_id = add_transfer_function();
-    //add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, 0, 0);
-    //add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, 1, 1);
-    const float low = 0.0f;
+
+    /*const float low = 0.0f;//field_value_to_normalized_value(&field, 0);
     const float high = 0.2f;
-    set_logarithmic_transfer_function(TF_id, TF_RED, low, high, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_GREEN, low, high, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_BLUE, low, high, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_ALPHA, low, high, 0, 1);
+
+    add_piecewise_linear_transfer_function_node(TF_id, TF_RED, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_id, TF_GREEN, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_id, TF_BLUE, low, 0);
+
+    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, 0, 0);
+    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, high, 1);*/
+
+    set_logarithmic_transfer_function(TF_id, TF_RED,   0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_id, TF_GREEN, 0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_id, TF_BLUE,  0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_id, TF_ALPHA, 0, 1, 0, 1);
 
     create_shader_program(&shader_program);
 
@@ -60,8 +72,6 @@ void initialize_renderer(void)
     load_planes();
     load_textures(&shader_program);
     load_transform_matrices(&shader_program);
-
-    print_transfer_function(TF_id, TF_ALPHA);
 }
 
 void sync_renderer(void)

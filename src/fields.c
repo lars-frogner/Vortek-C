@@ -7,6 +7,7 @@
 #include <float.h>
 
 
+static size_t get_field_array_length(const Field* field);
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value);
 static void scale_float_array(float* array, size_t length, float zero_value, float unity_value);
 
@@ -100,11 +101,14 @@ Field create_field(enum field_type type, float* data,
     field.extent_y = extent_y;
     field.extent_z = extent_z;
 
-    const size_t length = size_x*size_y*size_z*((type == VECTOR_FIELD) ? 3 : 1);
+    const size_t length = get_field_array_length(&field);
 
     find_float_array_limits(data, length, &field.min_value, &field.max_value);
 
     scale_float_array(data, length, field.min_value, field.max_value);
+
+    field.lower_clip_value = field.min_value;
+    field.upper_clip_value = field.max_value;
 
     return field;
 }
@@ -126,20 +130,43 @@ void reset_field(Field* field)
     field->extent_z = 0;
     field->min_value = 0;
     field->max_value = 0;
+    field->lower_clip_value = 0;
+    field->upper_clip_value = 0;
+}
+
+void clip_field_values(Field* field, float lower_clip_value, float upper_clip_value)
+{
+    check(field);
+    check(field->data);
+    check(upper_clip_value > lower_clip_value);
+
+    const float scale = 1.0f/(field->upper_clip_value - field->lower_clip_value);
+    const float new_zero_value = (lower_clip_value - field->lower_clip_value)*scale;
+    const float new_unity_value = (upper_clip_value - field->lower_clip_value)*scale;
+
+    scale_float_array(field->data, get_field_array_length(field), new_zero_value, new_unity_value);
+
+    field->lower_clip_value = lower_clip_value;
+    field->upper_clip_value = upper_clip_value;
 }
 
 float field_value_to_normalized_value(const Field* field, float field_value)
 {
     check(field);
-    check(field->max_value > field->min_value);
-    return (field_value - field->min_value)/(field->max_value - field->min_value);
+    check(field->upper_clip_value > field->lower_clip_value);
+    return (field_value - field->lower_clip_value)/(field->upper_clip_value - field->lower_clip_value);
 }
 
 float normalized_value_to_field_value(const Field* field, float normalized_value)
 {
     check(field);
-    check(field->max_value > field->min_value);
-    return field->min_value + normalized_value*(field->max_value - field->min_value);
+    check(field->upper_clip_value > field->lower_clip_value);
+    return field->lower_clip_value + normalized_value*(field->upper_clip_value - field->lower_clip_value);
+}
+
+static size_t get_field_array_length(const Field* field)
+{
+    return field->size_x*field->size_y*field->size_z*((field->type == VECTOR_FIELD) ? 3 : 1);
 }
 
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value)
