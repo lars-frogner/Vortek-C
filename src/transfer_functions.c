@@ -460,9 +460,9 @@ static void compute_logarithmic_array_segment(float* segment, size_t segment_len
     assert(end_value > start_value);
 
     size_t i;
-    const float offset = expf(start_value);
-    const float scale = (expf(end_value) - offset)/(segment_length - 1);
+    const float offset = powf(10, start_value);
+    const float scale = (powf(10, end_value) - offset)/(segment_length - 1);
 
     for (i = 0; i < segment_length; i++)
-        segment[i*stride] = logf(i*scale + offset);
+        segment[i*stride] = log10f(i*scale + offset);
 }
