@@ -1,6 +1,7 @@
 #include "trackball.h"
 
 #include "error.h"
+#include "extra_math.h"
 #include "geometry.h"
 #include "transformation.h"
 #include "renderer.h"
@@ -11,7 +12,7 @@
 static Vector3 compute_trackball_point(double x, double y);
 static double compute_trackball_pick_depth(double x, double y);
 static void screen_coords_to_trackball_coords(double screen_coord_x, double screen_coord_y,
-                                              int screen_height,
+                                              int screen_width, int screen_height,
                                               double* x, double* y);
 
 
@@ -22,21 +23,23 @@ static double trackball_radius = 1.0;
 static Vector3 previous_trackball_point = {{0}};
 
 
-void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, int screen_height)
+void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
 {
+    assert(screen_width > 0);
     assert(screen_height > 0);
 
     double x, y;
-    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_height, &x, &y);
+    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
     previous_trackball_point = compute_trackball_point(x, y);
 }
 
-void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y, int screen_height)
+void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
 {
+    assert(screen_width > 0);
     assert(screen_height > 0);
 
     double x, y;
-    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_height, &x, &y);
+    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
     const Vector3 current_trackball_point = compute_trackball_point(x, y);
 
     Vector3 rotation_axis = cross3(&previous_trackball_point, &current_trackball_point);
@@ -83,14 +86,15 @@ static double compute_trackball_pick_depth(double x, double y)
 }
 
 static void screen_coords_to_trackball_coords(double screen_coord_x, double screen_coord_y,
-                                              int screen_height,
+                                              int screen_width, int screen_height,
                                               double* x, double* y)
 {
+    assert(screen_width > 0);
     assert(screen_height > 0);
     assert(x);
     assert(y);
 
     const double scale = 2.0/screen_height;
-    *x = -1.0 + scale*screen_coord_x;
-    *y =  1.0 - scale*screen_coord_y;
+    *x =  scale*(screen_coord_x - 0.5*screen_width);
+    *y = -scale*(screen_coord_y - 0.5*screen_height);
 }
