@@ -28,4 +28,7 @@ Field create_field(enum field_type type, float* data,
 
 void reset_field(Field* field);
 
+float field_value_to_normalized_value(const Field* field, float field_value);
+float normalized_value_to_field_value(const Field* field, float normalized_value);
+
 #endif

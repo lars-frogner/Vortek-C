@@ -128,6 +128,20 @@ void reset_field(Field* field)
     field->max_value = 0;
 }
 
+float field_value_to_normalized_value(const Field* field, float field_value)
+{
+    check(field);
+    check(field->max_value > field->min_value);
+    return (field_value - field->min_value)/(field->max_value - field->min_value);
+}
+
+float normalized_value_to_field_value(const Field* field, float normalized_value)
+{
+    check(field);
+    check(field->max_value > field->min_value);
+    return field->min_value + normalized_value*(field->max_value - field->min_value);
+}
+
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value)
 {
     assert(array);
