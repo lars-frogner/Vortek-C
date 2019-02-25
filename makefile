@@ -24,7 +24,6 @@ DEP_DIR = ${ROOT_DIR}/.d
 
 # Make sure required folders exist
 $(shell mkdir -p $(OBJ_DIR) > /dev/null)
-$(shell mkdir -p $(EXTERNAL_DIR) > /dev/null)
 $(shell mkdir -p $(DEP_DIR) > /dev/null)
 
 # Find all source files and create list of corresponding object files
