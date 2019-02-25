@@ -22,4 +22,7 @@ float cotangent(float angle);
 float degrees_to_radians(float degrees);
 float radians_to_regrees(float radians);
 
+int is_prime(size_t n);
+size_t next_prime(size_t n);
+
 #endif

@@ -66,3 +66,35 @@ float radians_to_regrees(float radians)
 {
     return radians*(float)(180/PI);
 }
+
+int is_prime(size_t n)
+{
+    if (n < 2)
+        return -1;
+
+    if (n < 4)
+        return 1;
+
+    if ((n % 2) == 0)
+        return 0;
+
+    const float limit_float = sqrtf((float)n);
+    const size_t limit = (size_t)limit_float;
+    size_t i;
+
+    for (i = 3; i <= limit; i += 2)
+    {
+        if ((n % i) == 0)
+            return 0;
+    }
+
+    return 1;
+}
+
+size_t next_prime(size_t n)
+{
+    while (is_prime(n) != 1)
+        n++;
+
+    return n;
+}
