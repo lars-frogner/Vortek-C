@@ -3,7 +3,9 @@
 
 #include "fields.h"
 
-unsigned int add_scalar_field_texture(const Field* field);
+void initialize_field_textures(void);
+const char* add_scalar_field_texture(const Field* field);
+void destroy_field_texture(const char* name);
 void cleanup_field_textures(void);
 
 #endif

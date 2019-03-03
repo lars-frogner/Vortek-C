@@ -2,6 +2,7 @@
 
 #include "gl_includes.h"
 #include "error.h"
+#include "hash_map.h"
 #include "texture.h"
 
 #include <stdlib.h>
@@ -15,48 +16,70 @@ typedef struct FieldTexture
     Texture* texture;
 } FieldTexture;
 
-typedef struct FieldTextureSet
-{
-    FieldTexture textures[MAX_TEXTURES];
-    unsigned int n_textures;
-} FieldTextureSet;
 
-
-static void destroy_field_texture_set(void);
+static FieldTexture* get_field_texture(const char* name);
 static void transfer_scalar_field_texture(FieldTexture* field_texture);
-static void destroy_field_texture(FieldTexture* field_texture);
+static void clear_field_texture(FieldTexture* field_texture);
 
 
-static FieldTextureSet texture_set = {0};
+static HashMap field_textures;
 
 
-unsigned int add_scalar_field_texture(const Field* field)
+void initialize_field_textures(void)
+{
+    field_textures = create_hash_map();
+}
+
+const char* add_scalar_field_texture(const Field* field)
 {
     check(field);
 
-    const unsigned int handle = texture_set.n_textures;
+    Texture* const texture = create_texture();
 
-    FieldTexture* const field_texture = texture_set.textures + handle;
+    MapItem item = insert_new_map_item(&field_textures, texture->name, sizeof(FieldTexture));
+    FieldTexture* const field_texture = (FieldTexture*)item.data;
 
     field_texture->field = *field;
-    field_texture->texture = create_texture("texture_%d", handle);
+    field_texture->texture = texture;
 
     transfer_scalar_field_texture(field_texture);
-    texture_set.n_textures++;
 
-    return handle;
+    return texture->name;
+}
+
+void destroy_field_texture(const char* name)
+{
+    FieldTexture* const field_texture = get_field_texture(name);
+
+    check(field_texture->texture);
+    Texture* const texture = field_texture->texture;
+
+    reset_field(&field_texture->field);
+    remove_map_item(&field_textures, name);
+
+    destroy_texture(texture);
 }
 
 void cleanup_field_textures(void)
 {
-    destroy_field_texture_set();
+    for (reset_map_iterator(&field_textures); field_textures.iterator; advance_map_iterator(&field_textures))
+    {
+        FieldTexture* const field_texture = get_field_texture(field_textures.iterator);
+        clear_field_texture(field_texture);
+    }
+
+    destroy_hash_map(&field_textures);
 }
 
-static void destroy_field_texture_set(void)
+static FieldTexture* get_field_texture(const char* name)
 {
-    unsigned int i;
-    for (i = 0; i < texture_set.n_textures; i++)
-        destroy_field_texture(texture_set.textures + i);
+    check(name);
+
+    MapItem item = get_map_item(&field_textures, name);
+    FieldTexture* const field_texture = (FieldTexture*)item.data;
+    check(field_texture);
+
+    return field_texture;
 }
 
 static void transfer_scalar_field_texture(FieldTexture* field_texture)
@@ -118,11 +141,12 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
     abort_on_GL_error("Could not generate mipmap for 3D texture");
 }
 
-static void destroy_field_texture(FieldTexture* field_texture)
+static void clear_field_texture(FieldTexture* field_texture)
 {
-    check(field_texture);
-    check(field_texture->texture);
+    assert(field_texture);
+    assert(field_texture->texture);
 
-    destroy_texture(field_texture->texture->handle);
     reset_field(&field_texture->field);
+    destroy_texture(field_texture->texture);
+    field_texture->texture = NULL;
 }

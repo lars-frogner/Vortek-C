@@ -3,6 +3,7 @@
 #include "gl_includes.h"
 #include "error.h"
 #include "extra_math.h"
+#include "hash_map.h"
 #include "texture.h"
 
 #include <stdio.h>
@@ -10,10 +11,8 @@
 #include <string.h>
 
 
-#define MAX_TRANSFER_FUNCTIONS 2
 #define TRANSFER_FUNCTION_COMPONENTS 4
 #define TRANSFER_FUNCTION_SIZE 256
-#define MAX_TEXTURE_NAME_LENGTH 22
 
 
 enum transfer_function_type {PIECEWISE_LINEAR, LOGARITHMIC};
@@ -30,17 +29,16 @@ typedef struct TransferFunctionTexture
     TransferFunction transfer_function;
     Texture* texture;
     int needs_sync;
-    int is_active;
 } TransferFunctionTexture;
 
 
-static unsigned int activate_next_transfer_function_texture(void);
+static TransferFunctionTexture* get_transfer_function_texture(const char* name);
 
 static void transfer_transfer_function_texture(TransferFunctionTexture* texture);
 
 static void sync_transfer_function(TransferFunctionTexture* texture);
 
-static void destroy_transfer_function_texture(TransferFunctionTexture* texture);
+static void clear_transfer_function_texture(TransferFunctionTexture* texture);
 
 static void reset_transfer_function_texture_data(TransferFunctionTexture* texture, unsigned int component);
 
@@ -65,72 +63,80 @@ static void compute_logarithmic_array_segment(float* segment, size_t segment_len
                                               float start_value, float end_value);
 
 
-static TransferFunctionTexture textures[MAX_TRANSFER_FUNCTIONS] = {0};
+static HashMap transfer_function_textures;
 
 
-void print_transfer_function(unsigned int id, enum transfer_function_component component)
+void initialize_transfer_functions(void)
 {
-    check(id < MAX_TRANSFER_FUNCTIONS);
+    transfer_function_textures = create_hash_map();
+}
+
+void print_transfer_function(const char* name, enum transfer_function_component component)
+{
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
 
     const float norm = 1.0f/(TRANSFER_FUNCTION_SIZE - 1);
 
     unsigned int i;
     for (i = 0; i < TRANSFER_FUNCTION_SIZE; i++)
-        printf("%5.3f: %.3f\n", i*norm, textures[id].transfer_function.output[i][component]);
+        printf("%5.3f: %.3f\n", i*norm, transfer_function_texture->transfer_function.output[i][component]);
 }
 
-unsigned int add_transfer_function(void)
+const char* add_transfer_function(void)
 {
-    const unsigned int id = activate_next_transfer_function_texture();
+    Texture* const texture = create_texture();
 
-    TransferFunctionTexture* const transfer_function_texture = textures + id;
+    MapItem item = insert_new_map_item(&transfer_function_textures, texture->name, sizeof(TransferFunctionTexture));
+    TransferFunctionTexture* const transfer_function_texture = (TransferFunctionTexture*)item.data;
 
     unsigned int component;
     for (component = 0; component < TRANSFER_FUNCTION_COMPONENTS; component++)
         reset_transfer_function_texture_data(transfer_function_texture, component);
 
-    transfer_function_texture->texture = create_texture("transfer_function_%d", id);
+    transfer_function_texture->texture = texture;
 
     transfer_transfer_function_texture(transfer_function_texture);
 
-    return id;
+    return texture->name;
 }
 
 void sync_transfer_functions(void)
 {
-    unsigned int id;
-    for (id = 0; id < MAX_TRANSFER_FUNCTIONS; id++)
-        if (textures[id].is_active)
-            sync_transfer_function(textures + id);
+    for (reset_map_iterator(&transfer_function_textures); transfer_function_textures.iterator; advance_map_iterator(&transfer_function_textures))
+    {
+        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_textures.iterator);
+        sync_transfer_function(transfer_function_texture);
+    }
 }
 
-void remove_transfer_function(unsigned int id)
+void remove_transfer_function(const char* name)
 {
-    check(id < MAX_TRANSFER_FUNCTIONS);
-    destroy_transfer_function_texture(textures + id);
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
+
+    check(transfer_function_texture->texture);
+    Texture* const texture = transfer_function_texture->texture;
+
+    remove_map_item(&transfer_function_textures, name);
+
+    destroy_texture(texture);
 }
 
 void cleanup_transfer_functions(void)
 {
-    unsigned int id;
-    for (id = 0; id < MAX_TRANSFER_FUNCTIONS; id++)
-        if (textures[id].is_active)
-            remove_transfer_function(id);
+    for (reset_map_iterator(&transfer_function_textures); transfer_function_textures.iterator; advance_map_iterator(&transfer_function_textures))
+    {
+        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_textures.iterator);
+        clear_transfer_function_texture(transfer_function_texture);
+    }
+
+    destroy_hash_map(&transfer_function_textures);
 }
 
-void add_piecewise_linear_transfer_function_node(unsigned int id, enum transfer_function_component component,
+void add_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                  float texture_coordinate, float value)
 {
-    check(id < MAX_TRANSFER_FUNCTIONS);
-
-    TransferFunctionTexture* const transfer_function_texture = textures + id;
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
-
-    if (!transfer_function_texture->is_active)
-    {
-        print_warning_message("Cannot modify inactive transfer function.");
-        return;
-    }
 
     const unsigned int node = texture_coordinate_to_node(texture_coordinate);
 
@@ -152,19 +158,11 @@ void add_piecewise_linear_transfer_function_node(unsigned int id, enum transfer_
     transfer_function_texture->needs_sync = 1;
 }
 
-void remove_piecewise_linear_transfer_function_node(unsigned int id, enum transfer_function_component component,
+void remove_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                     float texture_coordinate)
 {
-    check(id < MAX_TRANSFER_FUNCTIONS);
-
-    TransferFunctionTexture* const transfer_function_texture = textures + id;
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
-
-    if (!transfer_function_texture->is_active)
-    {
-        print_warning_message("Cannot modify inactive transfer function.");
-        return;
-    }
 
     if (transfer_function->types[component] != PIECEWISE_LINEAR)
     {
@@ -189,20 +187,12 @@ void remove_piecewise_linear_transfer_function_node(unsigned int id, enum transf
     transfer_function_texture->needs_sync = 1;
 }
 
-void set_logarithmic_transfer_function(unsigned int id, enum transfer_function_component component,
+void set_logarithmic_transfer_function(const char* name, enum transfer_function_component component,
                                        float start_texture_coordinate, float end_texture_coordinate,
                                        float start_value, float end_value)
 {
-    check(id < MAX_TRANSFER_FUNCTIONS);
-
-    TransferFunctionTexture* const transfer_function_texture = textures + id;
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
-
-    if (!transfer_function_texture->is_active)
-    {
-        print_warning_message("Cannot modify inactive transfer function.");
-        return;
-    }
 
     if (end_value <= start_value)
     {
@@ -252,24 +242,15 @@ void set_logarithmic_transfer_function(unsigned int id, enum transfer_function_c
     set_logarithmic_transfer_function_data(transfer_function, component, start_node, end_node, start_value, end_value);
 }
 
-static unsigned int activate_next_transfer_function_texture(void)
+static TransferFunctionTexture* get_transfer_function_texture(const char* name)
 {
-    unsigned int first_inactive_id = MAX_TRANSFER_FUNCTIONS;
-    unsigned int id;
-    for (id = 0; id < MAX_TRANSFER_FUNCTIONS; id++)
-    {
-        if (!textures[id].is_active)
-        {
-            first_inactive_id = id;
-            textures[id].is_active = 1;
-            break;
-        }
-    }
+    check(name);
 
-    if (first_inactive_id == MAX_TRANSFER_FUNCTIONS)
-        print_severe_message("Cannot exceed max limit of %d active transfer functions.", MAX_TRANSFER_FUNCTIONS);
+    MapItem item = get_map_item(&transfer_function_textures, name);
+    TransferFunctionTexture* const transfer_function_texture = (TransferFunctionTexture*)item.data;
+    check(transfer_function_texture);
 
-    return first_inactive_id;
+    return transfer_function_texture;
 }
 
 static void transfer_transfer_function_texture(TransferFunctionTexture* transfer_function_texture)
@@ -323,21 +304,15 @@ static void sync_transfer_function(TransferFunctionTexture* transfer_function_te
     }
 }
 
-static void destroy_transfer_function_texture(TransferFunctionTexture* transfer_function_texture)
+static void clear_transfer_function_texture(TransferFunctionTexture* transfer_function_texture)
 {
-    check(transfer_function_texture);
-    check(transfer_function_texture->texture);
+    assert(transfer_function_texture);
+    assert(transfer_function_texture->texture);
 
-    if (!transfer_function_texture->is_active)
-    {
-        print_warning_message("Cannot destroy transfer function texture before it is created.");
-        return;
-    }
-
-    destroy_texture(transfer_function_texture->texture->handle);
+    destroy_texture(transfer_function_texture->texture);
 
     transfer_function_texture->needs_sync = 0;
-    transfer_function_texture->is_active = 0;
+    transfer_function_texture->texture = NULL;
 }
 
 static void reset_transfer_function_texture_data(TransferFunctionTexture* transfer_function_texture, unsigned int component)
@@ -350,7 +325,7 @@ static void reset_transfer_function_texture_data(TransferFunctionTexture* transf
     transfer_function->types[component] = PIECEWISE_LINEAR;
 
     transfer_function->node_states[0][component] = 1;
-    transfer_function->node_states[MAX_TRANSFER_FUNCTIONS - 1][component] = 1;
+    transfer_function->node_states[TRANSFER_FUNCTION_SIZE - 1][component] = 1;
 
     unsigned int i;
     for (i = 0; i < TRANSFER_FUNCTION_SIZE; i++)

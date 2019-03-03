@@ -4,17 +4,19 @@
 #include "gl_includes.h"
 #include "shaders.h"
 
-#define MAX_TEXTURES 2
+#define MAX_TEXTURE_NAME_LENGTH 15
 
 typedef struct Texture
 {
     GLuint unit;
     GLuint id;
-    unsigned int handle;
+    char name[MAX_TEXTURE_NAME_LENGTH];
 } Texture;
 
-Texture* create_texture(const char* name, ...);
+void initialize_textures(void);
+Texture* create_texture(void);
 void load_textures(const ShaderProgram* shader_program);
-void destroy_texture(unsigned int handle);
+void destroy_texture(Texture* texture);
+void cleanup_textures(void);
 
 #endif
