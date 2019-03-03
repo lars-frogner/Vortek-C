@@ -101,16 +101,15 @@ void create_shader_program(ShaderProgram* shader_program)
 
         exit(EXIT_FAILURE);
     }
+
+    glDeleteShader(shader_program->vertex_shader_id);
+    glDeleteShader(shader_program->fragment_shader_id);
 }
 
 void destroy_shader_program(ShaderProgram* shader_program)
 {
     check(shader_program);
 
-    glDetachShader(shader_program->id, shader_program->vertex_shader_id);
-    glDetachShader(shader_program->id, shader_program->fragment_shader_id);
-    glDeleteShader(shader_program->vertex_shader_id);
-    glDeleteShader(shader_program->fragment_shader_id);
     glDeleteProgram(shader_program->id);
     abort_on_GL_error("Could not destroy shader program");
 
