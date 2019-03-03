@@ -33,6 +33,8 @@ ListItem get_last_list_item(const LinkedList* list);
 void join_lists(LinkedList* list, LinkedList* other_list);
 
 void remove_list_item(LinkedList* list, size_t idx);
+void remove_first_list_item(LinkedList* list);
+void remove_last_list_item(LinkedList* list);
 void clear_list(LinkedList* list);
 
 void append_string_to_list(LinkedList* list, const char* string);

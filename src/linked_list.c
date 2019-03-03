@@ -213,6 +213,20 @@ void remove_list_item(LinkedList* list, size_t idx)
     list->length--;
 }
 
+void remove_first_list_item(LinkedList* list)
+{
+    check(list);
+    check(list->length > 0);
+    remove_list_item(list, 0);
+}
+
+void remove_last_list_item(LinkedList* list)
+{
+    check(list);
+    check(list->length > 0);
+    remove_list_item(list, list->length-1);
+}
+
 void clear_list(LinkedList* list)
 {
     check(list);
