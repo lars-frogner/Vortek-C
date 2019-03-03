@@ -16,7 +16,8 @@ typedef struct HashMap
     MapEntry** entries;
     size_t base_size;
     size_t size;
-    size_t n_entries;
+    size_t length;
+    char* iterator;
 } HashMap;
 
 void print_map_content_as_strings(const HashMap* map);
@@ -31,5 +32,8 @@ void destroy_hash_map(HashMap* map);
 
 void insert_string_in_map(HashMap* map, const char* key, const char* string);
 const char* get_string_from_map(const HashMap* map, const char* key);
+
+void reset_map_iterator(HashMap* map);
+void advance_map_iterator(HashMap* map);
 
 #endif

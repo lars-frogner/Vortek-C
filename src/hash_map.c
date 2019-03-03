@@ -28,6 +28,7 @@ static void resize_hash_map(HashMap* map, size_t base_size);
 static MapEntry* create_entry(const char* key, size_t item_size);
 static void insert_entry(HashMap* map, MapEntry* entry);
 static void free_entry(MapEntry* entry);
+static long find_key_location(const HashMap* map, const char* key);
 static size_t compute_map_key_index(const char* key, size_t upper_limit, unsigned int attempt);
 static size_t compute_key_hash(const char* key, unsigned int prime_number, size_t upper_limit);
 
@@ -39,7 +40,7 @@ void print_map_content_as_strings(const HashMap* map)
 {
     check(map);
 
-    if (map->n_entries == 0)
+    if (map->length == 0)
     {
         printf("{}\n");
         return;
@@ -77,10 +78,10 @@ MapItem insert_new_map_item(HashMap* map, const char* key, size_t item_size)
 {
     check(map);
     check(key);
-    check(map->n_entries < map->size);
+    check(map->length < map->size);
     assert(item_size > 0);
 
-    const size_t load = (100*map->n_entries)/map->size;
+    const size_t load = (100*map->length)/map->size;
 
     if (load > 70)
         increase_hash_map_size(map);
@@ -96,22 +97,19 @@ MapItem get_map_item(const HashMap* map, const char* key)
     check(map);
     check(key);
 
-    unsigned int attempt = 0;
-    size_t hash = compute_map_key_index(key, map->size, attempt++);
+    const long location = find_key_location(map, key);
 
-    while (map->entries[hash] != NULL)
+    if (location >= 0)
     {
-        if (map->entries[hash] != &DELETED_MAP_ENTRY && strcmp(map->entries[hash]->key, key) == 0)
-            return map->entries[hash]->item;
-
-        hash = compute_map_key_index(key, map->size, attempt++);
+        return map->entries[location]->item;
     }
-
-    MapItem empty_item;
-    empty_item.data = NULL;
-    empty_item.size = 0;
-
-    return empty_item;
+    else
+    {
+        MapItem empty_item;
+        empty_item.data = NULL;
+        empty_item.size = 0;
+        return empty_item;
+    }
 }
 
 void remove_map_item(HashMap* map, const char* key)
@@ -119,24 +117,19 @@ void remove_map_item(HashMap* map, const char* key)
     check(map);
     check(key);
 
-    const size_t load = (100*map->n_entries)/map->size;
+    const size_t load = (100*map->length)/map->size;
 
     if (load < 10)
         decrease_hash_map_size(map);
 
-    unsigned int attempt = 0;
-    size_t hash = compute_map_key_index(key, map->size, attempt++);
+    const long location = find_key_location(map, key);
 
-    while (map->entries[hash] != NULL)
+    if (location >= 0)
     {
-        if (map->entries[hash] != &DELETED_MAP_ENTRY && strcmp(map->entries[hash]->key, key) == 0)
-        {
-            free_entry(map->entries[hash]);
-            map->entries[hash] = &DELETED_MAP_ENTRY;
-            map->n_entries--;
-        }
-
-        hash = compute_map_key_index(key, map->size, attempt++);
+        free_entry(map->entries[location]);
+        map->entries[location] = &DELETED_MAP_ENTRY;
+        map->length--;
+        map->iterator = NULL;
     }
 }
 
@@ -152,7 +145,8 @@ void clear_hash_map(HashMap* map)
         map->entries[idx] = NULL;
     }
 
-    map->n_entries = 0;
+    map->length = 0;
+    map->iterator = NULL;
 }
 
 void destroy_hash_map(HashMap* map)
@@ -167,7 +161,7 @@ void destroy_hash_map(HashMap* map)
     }
 
     map->size = 0;
-    map->n_entries = 0;
+    map->length = 0;
 }
 
 void insert_string_in_map(HashMap* map, const char* key, const char* string)
@@ -184,13 +178,54 @@ const char* get_string_from_map(const HashMap* map, const char* key)
     return (const char*)item.data;
 }
 
+void reset_map_iterator(HashMap* map)
+{
+    check(map);
+    map->iterator = NULL;
+
+    size_t i;
+    for (i = 0; i < map->size; i++)
+    {
+        if (map->entries[i] != NULL && map->entries[i] != &DELETED_MAP_ENTRY)
+        {
+            map->iterator = map->entries[i]->key;
+            break;
+        }
+    }
+}
+
+void advance_map_iterator(HashMap* map)
+{
+    check(map);
+
+    if (!map->iterator)
+        return;
+
+    const long location = find_key_location(map, map->iterator);
+    check(location >= 0);
+
+    size_t i;
+    for (i = (size_t)location + 1; i < map->size; i++)
+    {
+        if (map->entries[i] != NULL && map->entries[i] != &DELETED_MAP_ENTRY)
+        {
+            map->iterator = map->entries[i]->key;
+            break;
+        }
+    }
+
+    if (i == map->size)
+        map->iterator = NULL;
+}
+
 static void allocate_hash_map(HashMap* map, size_t base_size)
 {
     assert(map);
 
     map->base_size = base_size;
     map->size = next_prime(base_size);
-    map->n_entries = 0;
+    map->length = 0;
+    map->iterator = NULL;
 
     map->entries = (MapEntry**)calloc(map->size, sizeof(MapEntry*));
     check(map->entries);
@@ -254,7 +289,7 @@ static void insert_entry(HashMap* map, MapEntry* entry)
 {
     assert(map);
     assert(entry);
-    assert(map->n_entries < map->size);
+    assert(map->length < map->size);
 
     unsigned int attempt = 0;
     size_t hash = compute_map_key_index(entry->key, map->size, attempt++);
@@ -264,7 +299,7 @@ static void insert_entry(HashMap* map, MapEntry* entry)
         if (strcmp(map->entries[hash]->key, entry->key) == 0)
         {
             free_entry(map->entries[hash]);
-            map->n_entries--;
+            map->length--;
             break;
         }
 
@@ -272,7 +307,8 @@ static void insert_entry(HashMap* map, MapEntry* entry)
     }
 
     map->entries[hash] = entry;
-    map->n_entries++;
+    map->length++;
+    map->iterator = NULL;
 }
 
 static void free_entry(MapEntry* entry)
@@ -287,6 +323,26 @@ static void free_entry(MapEntry* entry)
         free(entry->item.data);
 
     free(entry);
+}
+
+static long find_key_location(const HashMap* map, const char* key)
+{
+    assert(map);
+    assert(key);
+
+    long location = -1;
+    unsigned int attempt = 0;
+    size_t hash = compute_map_key_index(key, map->size, attempt++);
+
+    while (map->entries[hash] != NULL)
+    {
+        if (map->entries[hash] != &DELETED_MAP_ENTRY && strcmp(map->entries[hash]->key, key) == 0)
+            location = (long)hash;
+
+        hash = compute_map_key_index(key, map->size, attempt++);
+    }
+
+    return location;
 }
 
 static size_t compute_map_key_index(const char* key, size_t upper_limit, unsigned int attempt)
