@@ -33,32 +33,36 @@ void initialize_renderer(void)
 
     glGetError();
 
-    //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
-    //                                 "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
-    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
-                                     "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
+    initialize_textures();
+    initialize_field_textures();
+    initialize_transfer_functions();
 
-    clip_field_values(&field, 0.0f, field.max_value*0.04f);
+    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
+                                     "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
+    //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
-    const unsigned int texture_id = add_scalar_field_texture(&field);
+    //clip_field_values(&field, 0.0f, field.max_value*0.04f);
 
-    const unsigned int TF_id = add_transfer_function();
+    const char* texture_name = add_scalar_field_texture(&field);
+
+    const char* TF_name = add_transfer_function();
 
     /*const float low = 0.0f;//field_value_to_normalized_value(&field, 0);
     const float high = 0.2f;
 
-    add_piecewise_linear_transfer_function_node(TF_id, TF_RED, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_id, TF_GREEN, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_id, TF_BLUE, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_name, TF_RED, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_name, TF_GREEN, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_name, TF_BLUE, low, 0);
 
-    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, 0, 0);
-    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_id, TF_ALPHA, high, 1);*/
+    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, 0, 0);
+    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, low, 0);
+    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, high, 1);*/
 
-    set_logarithmic_transfer_function(TF_id, TF_RED,   0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_GREEN, 0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_BLUE,  0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_id, TF_ALPHA, 0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_name, TF_RED,   0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_name, TF_GREEN, 0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_name, TF_BLUE,  0, 1, 0, 1);
+    set_logarithmic_transfer_function(TF_name, TF_ALPHA, 0, 1, 0, 1);
 
     create_shader_program(&shader_program);
 
@@ -83,8 +87,9 @@ void sync_renderer(void)
 void cleanup_renderer(void)
 {
     cleanup_planes();
-    cleanup_field_textures();
     cleanup_transfer_functions();
+    cleanup_field_textures();
+    cleanup_textures();
     destroy_shader_program(&shader_program);
 }
 
