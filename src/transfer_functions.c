@@ -68,7 +68,7 @@ static HashMap transfer_function_textures;
 
 void initialize_transfer_functions(void)
 {
-    transfer_function_textures = create_hash_map();
+    transfer_function_textures = create_map();
 }
 
 void print_transfer_function(const char* name, enum transfer_function_component component)
@@ -102,9 +102,9 @@ const char* add_transfer_function(void)
 
 void sync_transfer_functions(void)
 {
-    for (reset_map_iterator(&transfer_function_textures); transfer_function_textures.iterator; advance_map_iterator(&transfer_function_textures))
+    for (reset_map_iterator(&transfer_function_textures); valid_map_iterator(&transfer_function_textures); advance_map_iterator(&transfer_function_textures))
     {
-        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_textures.iterator);
+        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(get_current_map_key(&transfer_function_textures));
         sync_transfer_function(transfer_function_texture);
     }
 }
@@ -123,13 +123,13 @@ void remove_transfer_function(const char* name)
 
 void cleanup_transfer_functions(void)
 {
-    for (reset_map_iterator(&transfer_function_textures); transfer_function_textures.iterator; advance_map_iterator(&transfer_function_textures))
+    for (reset_map_iterator(&transfer_function_textures); valid_map_iterator(&transfer_function_textures); advance_map_iterator(&transfer_function_textures))
     {
-        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_textures.iterator);
+        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(get_current_map_key(&transfer_function_textures));
         clear_transfer_function_texture(transfer_function_texture);
     }
 
-    destroy_hash_map(&transfer_function_textures);
+    destroy_map(&transfer_function_textures);
 }
 
 void add_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
@@ -247,6 +247,7 @@ static TransferFunctionTexture* get_transfer_function_texture(const char* name)
     check(name);
 
     MapItem item = get_map_item(&transfer_function_textures, name);
+    assert(item.size == sizeof(TransferFunctionTexture));
     TransferFunctionTexture* const transfer_function_texture = (TransferFunctionTexture*)item.data;
     check(transfer_function_texture);
 
