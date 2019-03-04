@@ -4,6 +4,7 @@
 #include "extra_math.h"
 
 #include <stdlib.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -21,10 +22,10 @@ typedef struct MapEntry
 } MapEntry;
 
 
-static void allocate_hash_map(HashMap* map, size_t base_size);
-static void increase_hash_map_size(HashMap* map);
-static void decrease_hash_map_size(HashMap* map);
-static void resize_hash_map(HashMap* map, size_t base_size);
+static void allocate_map(HashMap* map, size_t base_size);
+static void increase_map_size(HashMap* map);
+static void decrease_map_size(HashMap* map);
+static void resize_map(HashMap* map, size_t base_size);
 static MapEntry* create_entry(const char* key, size_t item_size);
 static void insert_entry(HashMap* map, MapEntry* entry);
 static void free_entry(MapEntry* entry);
@@ -67,10 +68,10 @@ void print_map_content_as_strings(const HashMap* map)
     printf("}\n");
 }
 
-HashMap create_hash_map(void)
+HashMap create_map(void)
 {
     HashMap map;
-    allocate_hash_map(&map, INITIAL_HASH_MAP_BASE_SIZE);
+    allocate_map(&map, INITIAL_HASH_MAP_BASE_SIZE);
     return map;
 }
 
@@ -84,7 +85,7 @@ MapItem insert_new_map_item(HashMap* map, const char* key, size_t item_size)
     const size_t load = (100*map->length)/map->size;
 
     if (load > 70)
-        increase_hash_map_size(map);
+        increase_map_size(map);
 
     MapEntry* entry = create_entry(key, item_size);
     insert_entry(map, entry);
@@ -120,7 +121,7 @@ void remove_map_item(HashMap* map, const char* key)
     const size_t load = (100*map->length)/map->size;
 
     if (load < 10)
-        decrease_hash_map_size(map);
+        decrease_map_size(map);
 
     const long location = find_key_location(map, key);
 
@@ -133,7 +134,7 @@ void remove_map_item(HashMap* map, const char* key)
     }
 }
 
-void clear_hash_map(HashMap* map)
+void clear_map(HashMap* map)
 {
     check(map);
     check(map->entries);
@@ -149,13 +150,13 @@ void clear_hash_map(HashMap* map)
     map->iterator = NULL;
 }
 
-void destroy_hash_map(HashMap* map)
+void destroy_map(HashMap* map)
 {
     check(map);
 
     if (map->entries)
     {
-        clear_hash_map(map);
+        clear_map(map);
         free(map->entries);
         map->entries = NULL;
     }
@@ -164,12 +165,24 @@ void destroy_hash_map(HashMap* map)
     map->length = 0;
 }
 
-void insert_string_in_map(HashMap* map, const char* key, const char* string)
+void insert_string_in_map(HashMap* map, const char* key, const char* string, ...)
 {
     check(string);
-    const size_t item_size = sizeof(char)*(strlen(string) + 1);
+
+    va_list args;
+
+    va_start(args, string);
+    const int string_length = vsnprintf(NULL, 0, string, args);
+    va_end(args);
+
+    check(string_length > 0);
+    const size_t item_size = sizeof(char)*((size_t)string_length + 1);
+
     MapItem item = insert_new_map_item(map, key, item_size);
-    strcpy((char*)item.data, string);
+
+    va_start(args, string);
+    vsprintf((char*)item.data, string, args);
+    va_end(args);
 }
 
 const char* get_string_from_map(const HashMap* map, const char* key)
@@ -192,6 +205,12 @@ void reset_map_iterator(HashMap* map)
             break;
         }
     }
+}
+
+int valid_map_iterator(const HashMap* map)
+{
+    check(map);
+    return map->iterator != NULL;
 }
 
 void advance_map_iterator(HashMap* map)
@@ -218,7 +237,14 @@ void advance_map_iterator(HashMap* map)
         map->iterator = NULL;
 }
 
-static void allocate_hash_map(HashMap* map, size_t base_size)
+const char* get_current_map_key(const HashMap* map)
+{
+    check(map);
+    check(map->iterator);
+    return map->iterator;
+}
+
+static void allocate_map(HashMap* map, size_t base_size)
 {
     assert(map);
 
@@ -231,21 +257,21 @@ static void allocate_hash_map(HashMap* map, size_t base_size)
     check(map->entries);
 }
 
-static void increase_hash_map_size(HashMap* map)
+static void increase_map_size(HashMap* map)
 {
     assert(map);
     const size_t new_base_size = map->base_size*2;
-    resize_hash_map(map, new_base_size);
+    resize_map(map, new_base_size);
 }
 
-static void decrease_hash_map_size(HashMap* map)
+static void decrease_map_size(HashMap* map)
 {
     assert(map);
     const size_t new_base_size = map->base_size/2;
-    resize_hash_map(map, new_base_size);
+    resize_map(map, new_base_size);
 }
 
-static void resize_hash_map(HashMap* map, size_t base_size)
+static void resize_map(HashMap* map, size_t base_size)
 {
     assert(map);
 
@@ -253,7 +279,7 @@ static void resize_hash_map(HashMap* map, size_t base_size)
         return;
 
     HashMap old_map = *map;
-    allocate_hash_map(map, base_size);
+    allocate_map(map, base_size);
 
     MapEntry* entry = NULL;
 

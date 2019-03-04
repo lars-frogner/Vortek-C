@@ -22,18 +22,21 @@ typedef struct HashMap
 
 void print_map_content_as_strings(const HashMap* map);
 
-HashMap create_hash_map(void);
+HashMap create_map(void);
 MapItem insert_new_map_item(HashMap* map, const char* key, size_t item_size);
 MapItem get_map_item(const HashMap* map, const char* key);
 
 void remove_map_item(HashMap* map, const char* key);
-void clear_hash_map(HashMap* map);
-void destroy_hash_map(HashMap* map);
+void clear_map(HashMap* map);
+void destroy_map(HashMap* map);
 
-void insert_string_in_map(HashMap* map, const char* key, const char* string);
+void insert_string_in_map(HashMap* map, const char* key, const char* string, ...);
 const char* get_string_from_map(const HashMap* map, const char* key);
 
 void reset_map_iterator(HashMap* map);
+int valid_map_iterator(const HashMap* map);
 void advance_map_iterator(HashMap* map);
+
+const char* get_current_map_key(const HashMap* map);
 
 #endif
