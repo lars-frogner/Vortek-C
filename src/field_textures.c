@@ -27,7 +27,7 @@ static HashMap field_textures;
 
 void initialize_field_textures(void)
 {
-    field_textures = create_hash_map();
+    field_textures = create_map();
 }
 
 const char* add_scalar_field_texture(const Field* field)
@@ -62,13 +62,13 @@ void destroy_field_texture(const char* name)
 
 void cleanup_field_textures(void)
 {
-    for (reset_map_iterator(&field_textures); field_textures.iterator; advance_map_iterator(&field_textures))
+    for (reset_map_iterator(&field_textures); valid_map_iterator(&field_textures); advance_map_iterator(&field_textures))
     {
-        FieldTexture* const field_texture = get_field_texture(field_textures.iterator);
+        FieldTexture* const field_texture = get_field_texture(get_current_map_key(&field_textures));
         clear_field_texture(field_texture);
     }
 
-    destroy_hash_map(&field_textures);
+    destroy_map(&field_textures);
 }
 
 static FieldTexture* get_field_texture(const char* name)
@@ -76,6 +76,7 @@ static FieldTexture* get_field_texture(const char* name)
     check(name);
 
     MapItem item = get_map_item(&field_textures, name);
+    assert(item.size == sizeof(FieldTexture));
     FieldTexture* const field_texture = (FieldTexture*)item.data;
     check(field_texture);
 
