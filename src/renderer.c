@@ -9,6 +9,7 @@
 #include "field_textures.h"
 #include "transfer_functions.h"
 #include "axis_aligned_planes.h"
+#include "shader_generator.h"
 
 
 typedef struct WindowShape
@@ -47,6 +48,23 @@ void initialize_renderer(void)
     const char* texture_name = add_scalar_field_texture(&field);
 
     const char* TF_name = add_transfer_function();
+
+    ShaderSource vertex_source;
+    initialize_shader_source(&vertex_source);
+    add_vec4_vertex_input_in_shader(&vertex_source, "in_position", 0);
+    add_vec3_vertex_input_in_shader(&vertex_source, "in_tex_coord", 1);
+    add_mat4_uniform_in_shader(&vertex_source, "MVP_matrix");
+    size_t position_variable_number = transform_input_in_shader(&vertex_source, "MVP_matrix", "in_position");
+    assign_variable_to_output_in_shader(&vertex_source, position_variable_number, "gl_Position");
+    assign_vec3_input_to_output_in_shader(&vertex_source, "in_tex_coord", "out_tex_coord");
+    generate_shader_code(&vertex_source);
+
+    ShaderSource fragment_source;
+    initialize_shader_source(&fragment_source);
+    add_vec3_input_in_shader(&fragment_source, "in_tex_coord");
+    size_t texture_variable_number = add_scalar_field_texture_in_shader(&fragment_source, texture_name, "in_tex_coord");
+    assign_variable_to_vec4_output_in_shader(&fragment_source, texture_variable_number, "out_color");
+    generate_shader_code(&fragment_source);
 
     /*const float low = 0.0f;//field_value_to_normalized_value(&field, 0);
     const float high = 0.2f;
