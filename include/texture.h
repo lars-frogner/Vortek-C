@@ -4,13 +4,13 @@
 #include "gl_includes.h"
 #include "shaders.h"
 
-#define MAX_TEXTURE_NAME_LENGTH 15
+#define MAX_TEXTURE_NAME_SIZE 15
 
 typedef struct Texture
 {
     GLuint unit;
     GLuint id;
-    char name[MAX_TEXTURE_NAME_LENGTH];
+    char name[MAX_TEXTURE_NAME_SIZE];
 } Texture;
 
 void initialize_textures(void);

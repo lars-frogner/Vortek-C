@@ -28,8 +28,8 @@ static GLuint next_undeleted_unused_unit;
 
 void initialize_textures(void)
 {
-    textures = create_hash_map();
-    deleted_units = create_linked_list();
+    textures = create_map();
+    deleted_units = create_list();
     next_undeleted_unused_unit = 0;
 }
 
@@ -57,9 +57,9 @@ void load_textures(const ShaderProgram* shader_program)
 {
     check(shader_program);
 
-    for (reset_map_iterator(&textures); textures.iterator; advance_map_iterator(&textures))
+    for (reset_map_iterator(&textures); valid_map_iterator(&textures); advance_map_iterator(&textures))
     {
-        ExtendedTexture* const extended_texture = get_texture(textures.iterator);
+        ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
         set_texture_uniform(extended_texture, shader_program);
     }
 }
@@ -77,13 +77,13 @@ void destroy_texture(Texture* texture)
 
 void cleanup_textures(void)
 {
-    for (reset_map_iterator(&textures); textures.iterator; advance_map_iterator(&textures))
+    for (reset_map_iterator(&textures); valid_map_iterator(&textures); advance_map_iterator(&textures))
     {
-        ExtendedTexture* const extended_texture = get_texture(textures.iterator);
+        ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
         unload_texture(&extended_texture->texture);
     }
 
-    destroy_hash_map(&textures);
+    destroy_map(&textures);
     clear_list(&deleted_units);
 }
 
