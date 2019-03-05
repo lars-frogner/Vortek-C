@@ -5,6 +5,7 @@
 #include "extra_math.h"
 #include "geometry.h"
 #include "transformation.h"
+#include "shader_generator.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -63,6 +64,8 @@ static void update_face_set_lookup_tables(void);
 
 static void update_active_plane_set_dimension_and_order(void);
 
+static void create_vertex_array(void);
+
 
 static PlaneSet plane_set;
 
@@ -94,47 +97,25 @@ void create_planes(size_t size_x, size_t size_y, size_t size_z,
     update_plane_buffer_data(halfwidth, halfheight, halfdepth);
 
     update_face_set_lookup_tables();
+
+    create_vertex_array();
 }
 
-void load_planes(void)
+void generate_shader_code_for_planes(ShaderProgram* shader_program)
 {
-    // Generate vertex array object for keeping track of vertex attributes
-    glGenVertexArrays(1, &plane_set.vertex_array_object_id);
-    abort_on_GL_error("Could not generate VAO");
-    glBindVertexArray(plane_set.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
+    check(shader_program);
 
-    // Generate buffer object for vertices
-    glGenBuffers(1, &plane_set.vertex_buffer_id);
-    abort_on_GL_error("Could not generate vertex buffer object");
+    add_vec4_vertex_input_in_shader(&shader_program->vertex_shader_source, "in_position", 0);
+    add_vec3_vertex_input_in_shader(&shader_program->vertex_shader_source, "in_tex_coord", 1);
 
-    // Store buffer of all vertices on device
-    glBindBuffer(GL_ARRAY_BUFFER, plane_set.vertex_buffer_id);
-    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)plane_set.vertex_buffer_size, (GLvoid*)plane_set.vertex_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind VBO to VAO");
+    const char* transformation_matrix_name = get_transformation_name();
+    check(transformation_matrix_name);
 
-    // Specify vertex attribute pointer for corners
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)0);
-    glEnableVertexAttribArray(0);
-    abort_on_GL_error("Could not set VAO corner attributes");
+    const size_t position_variable_number = transform_input_in_shader(&shader_program->vertex_shader_source, transformation_matrix_name, "in_position");
+    assign_variable_to_output_in_shader(&shader_program->vertex_shader_source, position_variable_number, "gl_Position");
 
-    // Specify vertex attribute pointer for texture coordinates
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(plane_set.n_planes_total*sizeof(PlaneCorners)));
-    glEnableVertexAttribArray(1);
-    abort_on_GL_error("Could not set VAO texture coordinate attributes");
-
-    // Generate buffer object for face indices
-    glGenBuffers(1, &plane_set.face_buffer_id);
-    abort_on_GL_error("Could not generate face buffer object");
-
-    // Store buffer of all face indices on device
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, plane_set.face_buffer_id);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)plane_set.face_buffer_size, (GLvoid*)plane_set.face_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind IBO to VAO");
-
-    glBindVertexArray(0);
-
-    sync_planes();
+    assign_vec3_input_to_output_in_shader(&shader_program->vertex_shader_source, "in_tex_coord", "tex_coord");
+    add_vec3_input_in_shader(&shader_program->fragment_shader_source, "tex_coord");
 }
 
 void sync_planes(void)
@@ -421,4 +402,45 @@ static void update_active_plane_set_dimension_and_order(void)
     plane_set.active_order = (look_components[plane_set.active_axis] >= 0) ? 0 : 1;
 
     plane_set.update_requested = 0;
+}
+
+static void create_vertex_array(void)
+{
+    // Generate vertex array object for keeping track of vertex attributes
+    glGenVertexArrays(1, &plane_set.vertex_array_object_id);
+    abort_on_GL_error("Could not generate VAO");
+    glBindVertexArray(plane_set.vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO");
+
+    // Generate buffer object for vertices
+    glGenBuffers(1, &plane_set.vertex_buffer_id);
+    abort_on_GL_error("Could not generate vertex buffer object");
+
+    // Store buffer of all vertices on device
+    glBindBuffer(GL_ARRAY_BUFFER, plane_set.vertex_buffer_id);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)plane_set.vertex_buffer_size, (GLvoid*)plane_set.vertex_buffer, GL_STATIC_DRAW);
+    abort_on_GL_error("Could not bind VBO to VAO");
+
+    // Specify vertex attribute pointer for corners
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)0);
+    glEnableVertexAttribArray(0);
+    abort_on_GL_error("Could not set VAO corner attributes");
+
+    // Specify vertex attribute pointer for texture coordinates
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(plane_set.n_planes_total*sizeof(PlaneCorners)));
+    glEnableVertexAttribArray(1);
+    abort_on_GL_error("Could not set VAO texture coordinate attributes");
+
+    // Generate buffer object for face indices
+    glGenBuffers(1, &plane_set.face_buffer_id);
+    abort_on_GL_error("Could not generate face buffer object");
+
+    // Store buffer of all face indices on device
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, plane_set.face_buffer_id);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)plane_set.face_buffer_size, (GLvoid*)plane_set.face_buffer, GL_STATIC_DRAW);
+    abort_on_GL_error("Could not bind IBO to VAO");
+
+    glBindVertexArray(0);
+
+    sync_planes();
 }

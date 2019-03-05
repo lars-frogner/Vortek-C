@@ -4,6 +4,7 @@
 #include "io.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 
 GLuint load_shader_from_file(const char* filename, GLenum shader_type)
@@ -16,7 +17,7 @@ GLuint load_shader_from_file(const char* filename, GLenum shader_type)
 
     if (source_string)
     {
-        shader_id = load_shader_from_string(source_string, shader_type);
+        shader_id = load_shader_from_string((const char*)source_string, shader_type);
         free(source_string);
 
         if (shader_id == 0)
@@ -26,7 +27,7 @@ GLuint load_shader_from_file(const char* filename, GLenum shader_type)
     return shader_id;
 }
 
-GLuint load_shader_from_string(char* source_string, GLenum shader_type)
+GLuint load_shader_from_string(const char* source_string, GLenum shader_type)
 {
     assert(source_string);
 
@@ -64,15 +65,34 @@ GLuint load_shader_from_string(char* source_string, GLenum shader_type)
     return shader_id;
 }
 
-void create_shader_program(ShaderProgram* shader_program)
+void initialize_shader_program(ShaderProgram* shader_program)
 {
     check(shader_program);
 
     shader_program->id = glCreateProgram();
     abort_on_GL_error("Could not create shader program");
 
-    shader_program->vertex_shader_id = load_shader_from_file("shaders/simple.vertex.glsl", GL_VERTEX_SHADER);
-    shader_program->fragment_shader_id = load_shader_from_file("shaders/simple.fragment.glsl", GL_FRAGMENT_SHADER);
+    initialize_shader_source(&shader_program->vertex_shader_source);
+    initialize_shader_source(&shader_program->fragment_shader_source);
+
+    shader_program->vertex_shader_id = 0;
+    shader_program->vertex_shader_id = 0;
+}
+
+void compile_shader_program(ShaderProgram* shader_program)
+{
+    check(shader_program);
+
+    const char* vertex_source_string = generate_shader_code(&shader_program->vertex_shader_source);
+    const char* fragment_source_string = generate_shader_code(&shader_program->fragment_shader_source);
+
+    printf("\n------------------------- Vertex shader -------------------------\n%s-----------------------------------------------------------------\n",
+           vertex_source_string);
+    printf("\n------------------------ Fragment shader ------------------------\n%s-----------------------------------------------------------------\n",
+           fragment_source_string);
+
+    shader_program->vertex_shader_id = load_shader_from_string(vertex_source_string, GL_VERTEX_SHADER);
+    shader_program->fragment_shader_id = load_shader_from_string(fragment_source_string, GL_FRAGMENT_SHADER);
 
     if (shader_program->vertex_shader_id == 0 ||
         shader_program->fragment_shader_id == 0)
@@ -112,6 +132,9 @@ void destroy_shader_program(ShaderProgram* shader_program)
 
     glDeleteProgram(shader_program->id);
     abort_on_GL_error("Could not destroy shader program");
+
+    destroy_shader_source(&shader_program->vertex_shader_source);
+    destroy_shader_source(&shader_program->fragment_shader_source);
 
     shader_program->id = 0;
     shader_program->vertex_shader_id = 0;

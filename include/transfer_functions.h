@@ -9,7 +9,7 @@ void initialize_transfer_functions(void);
 
 void print_transfer_function(const char* name, enum transfer_function_component component);
 
-const char* add_transfer_function(void);
+const char* add_transfer_function(ShaderProgram* shader_program);
 
 void add_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                  float texture_coordinate, float value);

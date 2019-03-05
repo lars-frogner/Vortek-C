@@ -30,9 +30,10 @@ void initialize_field_textures(void)
     field_textures = create_map();
 }
 
-const char* add_scalar_field_texture(const Field* field)
+const char* add_scalar_field_texture(const Field* field, ShaderProgram* shader_program)
 {
     check(field);
+    check(shader_program);
 
     Texture* const texture = create_texture();
 
@@ -43,6 +44,8 @@ const char* add_scalar_field_texture(const Field* field)
     field_texture->texture = texture;
 
     transfer_scalar_field_texture(field_texture);
+
+    add_field_texture_in_shader(&shader_program->fragment_shader_source, texture->name);
 
     return texture->name;
 }

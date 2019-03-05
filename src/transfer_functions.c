@@ -82,8 +82,10 @@ void print_transfer_function(const char* name, enum transfer_function_component 
         printf("%5.3f: %.3f\n", i*norm, transfer_function_texture->transfer_function.output[i][component]);
 }
 
-const char* add_transfer_function(void)
+const char* add_transfer_function(ShaderProgram* shader_program)
 {
+    check(shader_program);
+
     Texture* const texture = create_texture();
 
     MapItem item = insert_new_map_item(&transfer_function_textures, texture->name, sizeof(TransferFunctionTexture));
@@ -96,6 +98,8 @@ const char* add_transfer_function(void)
     transfer_function_texture->texture = texture;
 
     transfer_transfer_function_texture(transfer_function_texture);
+
+    add_transfer_function_in_shader(&shader_program->fragment_shader_source, texture->name);
 
     return texture->name;
 }

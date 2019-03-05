@@ -32,23 +32,18 @@ static Transformation transformation;
 static void update_perspective_projection_matrix(void);
 
 
-void create_transform_matrices(float view_distance,
-                               float vertical_field_of_view,
-                               float aspect_ratio,
-                               float near_plane_distance,
-                               float far_plane_distance)
+void initialize_transformation(void)
 {
-    transformation.name = "model_view_projection_matrix";
-
+    transformation.name = "MVP_matrix";
     transformation.model_matrix = IDENTITY_MATRIX4F;
-
     transformation.view_matrix = IDENTITY_MATRIX4F;
-    apply_translation(&transformation.view_matrix, 0, 0, -view_distance);
+    transformation.model_view_projection_matrix = IDENTITY_MATRIX4F;
+}
 
-    update_camera_vertical_field_of_view(vertical_field_of_view);
-    update_camera_aspect_ratio(aspect_ratio);
-    update_camera_clip_plane_distances(near_plane_distance, far_plane_distance);
-    update_perspective_projection_matrix();
+void generate_shader_code_for_transformation(ShaderProgram* shader_program)
+{
+    check(shader_program);
+    add_mat4_uniform_in_shader(&shader_program->vertex_shader_source, transformation.name);
 }
 
 void load_transform_matrices(const ShaderProgram* shader_program)
@@ -74,6 +69,21 @@ void apply_model_scaling(float scale)
     assert(scale > 0);
     apply_scaling(&transformation.model_matrix, scale, scale, scale);
     transformation.needs_update = 1;
+}
+
+void update_view_distance(float view_distance)
+{
+    apply_translation(&transformation.view_matrix, 0, 0, -view_distance);
+}
+
+void update_camera_properties(float vertical_field_of_view,
+                              float aspect_ratio,
+                              float near_plane_distance,
+                              float far_plane_distance)
+{
+    update_camera_vertical_field_of_view(vertical_field_of_view);
+    update_camera_aspect_ratio(aspect_ratio);
+    update_camera_clip_plane_distances(near_plane_distance, far_plane_distance);
 }
 
 void update_camera_vertical_field_of_view(float vertical_field_of_view)
@@ -113,6 +123,11 @@ void sync_transform_matrices(const ShaderProgram* shader_program)
 
         transformation.needs_update = 0;
     }
+}
+
+const char* get_transformation_name(void)
+{
+    return transformation.name;
 }
 
 Matrix4f get_view_transform_matrix(void)
