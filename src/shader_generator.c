@@ -36,8 +36,6 @@ static void add_sampler1D_uniform(ShaderSource* source, const char* name);
 static void add_vec3_output(ShaderSource* source, const char* name);
 static void add_vec4_output(ShaderSource* source, const char* name);
 
-static size_t apply_scalar_field_texture_sampling(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name);
-
 static Variable* create_variable(ShaderSource* source);
 static void delete_variable(ShaderSource* source, size_t variable_number);
 
@@ -104,10 +102,24 @@ size_t transform_input_in_shader(ShaderSource* source, const char* matrix_name, 
     return variable->number;
 }
 
-size_t add_scalar_field_texture_in_shader(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name)
+void add_field_texture_in_shader(ShaderSource* source, const char* texture_name)
 {
     add_sampler3D_uniform(source, texture_name);
-    return apply_scalar_field_texture_sampling(source, texture_name, texture_coordinates_name);
+}
+
+size_t apply_scalar_field_texture_sampling_in_shader(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name)
+{
+    check(source);
+    check(texture_name);
+
+    Variable* const variable = create_variable(source);
+
+    set_string(&variable->expression, "    float variable_%d = texture(%s, %s).r;\n", variable->number, texture_name, texture_coordinates_name);
+
+    add_global_dependency(variable, texture_name);
+    add_global_dependency(variable, texture_coordinates_name);
+
+    return variable->number;
 }
 
 void add_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name)
@@ -181,12 +193,12 @@ void assign_vec3_input_to_output_in_shader(ShaderSource* source, const char* inp
     append_size_t_to_list(&source->output_variables, variable->number);
 }
 
-void generate_shader_code(ShaderSource* source)
+const char* generate_shader_code(ShaderSource* source)
 {
     check(source);
 
     if (source->output_variables.length == 0)
-        return;
+        print_severe_message("Shader code has no output.");
 
     clear_source_code(source);
 
@@ -203,7 +215,7 @@ void generate_shader_code(ShaderSource* source)
 
     extend_string(&source->code, "}\n");
 
-    puts(source->code.chars);
+    return source->code.chars;
 }
 
 void remove_variable_in_shader(ShaderSource* source, size_t variable_number)
@@ -374,21 +386,6 @@ static void add_vec4_output(ShaderSource* source, const char* name)
     check(source);
     check(name);
     insert_string_in_map(&source->global_variable_expressions, name, "out vec4 %s;\n", name);
-}
-
-static size_t apply_scalar_field_texture_sampling(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name)
-{
-    check(source);
-    check(texture_name);
-
-    Variable* const variable = create_variable(source);
-
-    set_string(&variable->expression, "    float variable_%d = texture(%s, %s).r;\n", variable->number, texture_name, texture_coordinates_name);
-
-    add_global_dependency(variable, texture_name);
-    add_global_dependency(variable, texture_coordinates_name);
-
-    return variable->number;
 }
 
 static Variable* create_variable(ShaderSource* source)

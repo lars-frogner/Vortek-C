@@ -26,7 +26,8 @@ void add_mat4_uniform_in_shader(ShaderSource* source, const char* name);
 
 size_t transform_input_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name);
 
-size_t add_scalar_field_texture_in_shader(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name);
+void add_field_texture_in_shader(ShaderSource* source, const char* texture_name);
+size_t apply_scalar_field_texture_sampling_in_shader(ShaderSource* source, const char* texture_name, const char* texture_coordinates_name);
 
 void add_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name);
 size_t apply_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name, size_t input_variable_number);
@@ -35,7 +36,7 @@ void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_n
 void assign_variable_to_vec4_output_in_shader(ShaderSource* source, size_t variable_number, const char* output_name);
 void assign_vec3_input_to_output_in_shader(ShaderSource* source, const char* input_name, const char* output_name);
 
-void generate_shader_code(ShaderSource* source);
+const char* generate_shader_code(ShaderSource* source);
 
 void remove_variable_in_shader(ShaderSource* source, size_t variable_number);
 void destroy_shader_source(ShaderSource* source);
