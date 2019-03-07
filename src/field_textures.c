@@ -4,6 +4,7 @@
 #include "error.h"
 #include "hash_map.h"
 #include "texture.h"
+#include "bricks.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,7 +13,7 @@
 
 typedef struct FieldTexture
 {
-    Field field;
+    BrickedField bricked_field;
     Texture* texture;
 } FieldTexture;
 
@@ -30,24 +31,24 @@ void initialize_field_textures(void)
     field_textures = create_map();
 }
 
-const char* add_scalar_field_texture(const Field* field, ShaderProgram* shader_program)
+const char* create_scalar_field_texture(const Field* field, ShaderProgram* shader_program)
 {
     check(field);
     check(shader_program);
 
     Texture* const texture = create_texture();
 
-    MapItem item = insert_new_map_item(&field_textures, texture->name, sizeof(FieldTexture));
+    MapItem item = insert_new_map_item(&field_textures, texture->name.chars, sizeof(FieldTexture));
     FieldTexture* const field_texture = (FieldTexture*)item.data;
 
-    field_texture->field = *field;
+    create_bricked_field(&field_texture->bricked_field, field, 8, 1);
     field_texture->texture = texture;
 
     transfer_scalar_field_texture(field_texture);
 
-    add_field_texture_in_shader(&shader_program->fragment_shader_source, texture->name);
+    add_field_texture_in_shader(&shader_program->fragment_shader_source, texture->name.chars);
 
-    return texture->name;
+    return texture->name.chars;
 }
 
 void destroy_field_texture(const char* name)
@@ -57,7 +58,7 @@ void destroy_field_texture(const char* name)
     check(field_texture->texture);
     Texture* const texture = field_texture->texture;
 
-    reset_field(&field_texture->field);
+    destroy_bricked_field(&field_texture->bricked_field);
     remove_map_item(&field_textures, name);
 
     destroy_texture(texture);
@@ -91,27 +92,34 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
     check(field_texture);
     check(field_texture->texture);
 
-    if (field_texture->field.type != SCALAR_FIELD)
+    BrickedField* const bricked_field = &field_texture->bricked_field;
+    const Field* const field = bricked_field->field;
+    check(field);
+
+    if (field->type != SCALAR_FIELD)
         print_severe_message("Cannot create scalar texture from non-scalar field type.");
 
-    if (!field_texture->field.data)
+    if (!field->data)
         print_severe_message("Cannot create texture with NULL data pointer.");
 
-    if (field_texture->field.size_x == 0 || field_texture->field.size_y == 0 || field_texture->field.size_z == 0)
+    if (field->size_x == 0 || field->size_y == 0 || field->size_z == 0)
         print_severe_message("Cannot create texture with size 0 along any dimension.");
 
-    if (field_texture->field.size_x > GL_MAX_3D_TEXTURE_SIZE ||
-        field_texture->field.size_y > GL_MAX_3D_TEXTURE_SIZE ||
-        field_texture->field.size_z > GL_MAX_3D_TEXTURE_SIZE)
+    if (field->size_x > GL_MAX_3D_TEXTURE_SIZE ||
+        field->size_y > GL_MAX_3D_TEXTURE_SIZE ||
+        field->size_z > GL_MAX_3D_TEXTURE_SIZE)
         print_severe_message("Cannot create texture with size exceeding %d along any dimension.", GL_MAX_3D_TEXTURE_SIZE);
-
-    glGenTextures(1, &field_texture->texture->id);
-    abort_on_GL_error("Could not generate texture object");
 
     glActiveTexture(GL_TEXTURE0 + field_texture->texture->unit);
     abort_on_GL_error("Could not set active texture unit");
 
-    glBindTexture(GL_TEXTURE_3D, field_texture->texture->id);
+    ListItem item = append_new_list_item(&field_texture->texture->ids, sizeof(GLuint));
+    GLuint* const id = (GLuint*)item.data;
+
+    glGenTextures(1, id);
+    abort_on_GL_error("Could not generate texture object");
+
+    glBindTexture(GL_TEXTURE_3D, *id);
     abort_on_GL_error("Could not bind 3D texture");
 
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -120,20 +128,27 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
 
-    glTexImage3D(GL_TEXTURE_3D,
+    /*glTexImage3D(GL_TEXTURE_3D,
                  0,
                  GL_COMPRESSED_RED,
-                 (GLsizei)field_texture->field.size_x,
-                 (GLsizei)field_texture->field.size_y,
-                 (GLsizei)field_texture->field.size_z,
+                 (GLsizei)field->size_x,
+                 (GLsizei)field->size_y,
+                 (GLsizei)field->size_z,
                  0,
                  GL_RED,
                  GL_FLOAT,
-                 (GLvoid*)field_texture->field.data);
+                 (GLvoid*)field->data);*/
+    glTexImage3D(GL_TEXTURE_3D,
+                 0,
+                 GL_COMPRESSED_RED,
+                 (GLsizei)(bricked_field->n_bricks_x*bricked_field->padded_brick_size),
+                 (GLsizei)(bricked_field->n_bricks_y*bricked_field->padded_brick_size),
+                 (GLsizei)(bricked_field->n_bricks_z*bricked_field->padded_brick_size),
+                 0,
+                 GL_RED,
+                 GL_FLOAT,
+                 (GLvoid*)bricked_field->bricks->data);
     abort_on_GL_error("Could not define 3D texture image");
-
-    free(field_texture->field.data);
-    field_texture->field.data = NULL;
 
     GLint is_compressed;
     glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_COMPRESSED, &is_compressed);
@@ -150,7 +165,7 @@ static void clear_field_texture(FieldTexture* field_texture)
     assert(field_texture);
     assert(field_texture->texture);
 
-    reset_field(&field_texture->field);
+    destroy_bricked_field(&field_texture->bricked_field);
     destroy_texture(field_texture->texture);
     field_texture->texture = NULL;
 }
