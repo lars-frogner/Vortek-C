@@ -17,6 +17,38 @@ DynamicString create_string(void)
     return string;
 }
 
+DynamicString create_duplicate_string(const DynamicString* source_string)
+{
+    check(source_string);
+
+    DynamicString destination_string;
+
+    destination_string.chars = (char*)malloc(source_string->size);
+    strcpy(destination_string.chars, source_string->chars);
+
+    destination_string.size = source_string->size;
+    destination_string.length = source_string->length;
+
+    return destination_string;
+}
+
+void copy_string(DynamicString* destination_string, const DynamicString* source_string)
+{
+    check(destination_string);
+    check(source_string);
+
+    if (!source_string->chars)
+        return;
+
+    clear_string(destination_string);
+
+    destination_string->chars = (char*)malloc(source_string->size);
+    strcpy(destination_string->chars, source_string->chars);
+
+    destination_string->size = source_string->size;
+    destination_string->length = source_string->length;
+}
+
 void set_string(DynamicString* string, const char* chars, ...)
 {
     check(string);
