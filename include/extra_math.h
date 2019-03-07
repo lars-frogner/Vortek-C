@@ -18,6 +18,10 @@ int signum(float x);
 
 float clamp(float x, float lower, float upper);
 
+size_t pow2_size_t(unsigned int exponent);
+unsigned int floored_log2_size_t(size_t number);
+size_t closest_ge_pow2_size_t(size_t number);
+
 float cotangent(float angle);
 float degrees_to_radians(float degrees);
 float radians_to_regrees(float radians);

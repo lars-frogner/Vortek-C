@@ -25,7 +25,7 @@ size_t max_size(size_t a, size_t b)
 
 size_t min_size(size_t a, size_t b)
 {
-    return (a >= b) ? a : b;
+    return (a <= b) ? a : b;
 }
 
 unsigned int argfmax3(float x, float y, float z)
@@ -48,6 +48,27 @@ int signum(float x)
 float clamp(float x, float lower, float upper)
 {
     return (x > lower) ? ((x < upper) ? x : upper) : lower;
+}
+
+size_t pow2_size_t(unsigned int exponent)
+{
+    return 1 << (size_t)exponent;
+}
+
+unsigned int floored_log2_size_t(size_t number)
+{
+    assert(number > 0);
+    unsigned int result = 0;
+    while (number >>= 1)
+        result++;
+    return result;
+}
+
+size_t closest_ge_pow2_size_t(size_t number)
+{
+    assert(number > 0);
+    const size_t result = pow2_size_t(floored_log2_size_t(number));
+    return (result < number) ? 2*result : result;
 }
 
 float cotangent(float angle)
