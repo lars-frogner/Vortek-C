@@ -2,15 +2,15 @@
 #define TEXTURE_H
 
 #include "gl_includes.h"
+#include "dynamic_string.h"
+#include "linked_list.h"
 #include "shaders.h"
-
-#define MAX_TEXTURE_NAME_SIZE 15
 
 typedef struct Texture
 {
     GLuint unit;
-    GLuint id;
-    char name[MAX_TEXTURE_NAME_SIZE];
+    LinkedList ids;
+    DynamicString name;
 } Texture;
 
 void initialize_textures(void);

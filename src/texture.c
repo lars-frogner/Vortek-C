@@ -40,10 +40,11 @@ Texture* create_texture(void)
     const GLuint unit = next_unused_texture_unit();
 
     texture.unit = unit;
-    texture.id = 0;
-    sprintf(texture.name, "texture_%d", unit);
+    texture.ids = create_list();
+    texture.name = create_string();
+    set_string(&texture.name, "texture_%d", unit);
 
-    MapItem item = insert_new_map_item(&textures, texture.name, sizeof(ExtendedTexture));
+    MapItem item = insert_new_map_item(&textures, texture.name.chars, sizeof(ExtendedTexture));
 
     ExtendedTexture* const extended_texture = (ExtendedTexture*)item.data;
 
@@ -72,7 +73,10 @@ void destroy_texture(Texture* texture)
     GLuint* const unit = (GLuint*)item.data;
     *unit = texture->unit;
 
-    remove_map_item(&textures, texture->name);
+    DynamicString texture_name_copy = create_duplicate_string(&texture->name);
+    clear_string(&texture->name);
+    remove_map_item(&textures, texture_name_copy.chars);
+    clear_string(&texture_name_copy);
 }
 
 void cleanup_textures(void)
@@ -81,6 +85,7 @@ void cleanup_textures(void)
     {
         ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
         unload_texture(&extended_texture->texture);
+        clear_string(&extended_texture->texture.name);
     }
 
     destroy_map(&textures);
@@ -120,15 +125,15 @@ static void set_texture_uniform(ExtendedTexture* extended_texture, const ShaderP
 {
     check(extended_texture);
 
-    if (strlen(extended_texture->texture.name) == 0)
+    if (extended_texture->texture.name.length == 0)
         print_severe_message("Cannot set uniform for texture with no name.");
 
-    extended_texture->uniform_location = glGetUniformLocation(shader_program->id, extended_texture->texture.name);
+    extended_texture->uniform_location = glGetUniformLocation(shader_program->id, extended_texture->texture.name.chars);
     abort_on_GL_error("Could not get texture uniform location");
 
     if (extended_texture->uniform_location == -1)
     {
-        print_warning_message("Texture \"%s\" not used in shader program", extended_texture->texture.name);
+        print_warning_message("Texture \"%s\" not used in shader program", extended_texture->texture.name.chars);
         return;
     }
 
@@ -142,11 +147,13 @@ static void set_texture_uniform(ExtendedTexture* extended_texture, const ShaderP
 static void unload_texture(Texture* texture)
 {
     check(texture);
-    check(texture->name);
 
-    glDeleteTextures(1, &texture->id);
-    abort_on_GL_error("Could not destroy texture object");
+    for (reset_list_iterator(&texture->ids); valid_list_iterator(&texture->ids); advance_list_iterator(&texture->ids))
+    {
+        ListItem item = get_current_list_item(&texture->ids);
+        glDeleteTextures(1, (GLuint*)item.data);
+        abort_on_GL_error("Could not destroy texture object");
+    }
 
-    texture->id = 0;
-    texture->name[0] = '\0';
+    clear_list(&texture->ids);
 }

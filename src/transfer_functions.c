@@ -82,13 +82,13 @@ void print_transfer_function(const char* name, enum transfer_function_component 
         printf("%5.3f: %.3f\n", i*norm, transfer_function_texture->transfer_function.output[i][component]);
 }
 
-const char* add_transfer_function(ShaderProgram* shader_program)
+const char* create_transfer_function(ShaderProgram* shader_program)
 {
     check(shader_program);
 
     Texture* const texture = create_texture();
 
-    MapItem item = insert_new_map_item(&transfer_function_textures, texture->name, sizeof(TransferFunctionTexture));
+    MapItem item = insert_new_map_item(&transfer_function_textures, texture->name.chars, sizeof(TransferFunctionTexture));
     TransferFunctionTexture* const transfer_function_texture = (TransferFunctionTexture*)item.data;
 
     unsigned int component;
@@ -99,9 +99,9 @@ const char* add_transfer_function(ShaderProgram* shader_program)
 
     transfer_transfer_function_texture(transfer_function_texture);
 
-    add_transfer_function_in_shader(&shader_program->fragment_shader_source, texture->name);
+    add_transfer_function_in_shader(&shader_program->fragment_shader_source, texture->name.chars);
 
-    return texture->name;
+    return texture->name.chars;
 }
 
 void sync_transfer_functions(void)
@@ -263,13 +263,16 @@ static void transfer_transfer_function_texture(TransferFunctionTexture* transfer
     check(transfer_function_texture);
     check(transfer_function_texture->texture);
 
-    glGenTextures(1, &transfer_function_texture->texture->id);
+    ListItem item = append_new_list_item(&transfer_function_texture->texture->ids, sizeof(GLuint));
+    GLuint* const id = (GLuint*)item.data;
+
+    glGenTextures(1, id);
     abort_on_GL_error("Could not generate texture object for transfer function");
 
     glActiveTexture(GL_TEXTURE0 + transfer_function_texture->texture->unit);
     abort_on_GL_error("Could not set active texture unit for transfer function");
 
-    glBindTexture(GL_TEXTURE_1D, transfer_function_texture->texture->id);
+    glBindTexture(GL_TEXTURE_1D, *id);
     abort_on_GL_error("Could not bind 1D texture for transfer function");
 
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
