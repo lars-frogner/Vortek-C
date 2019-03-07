@@ -36,6 +36,7 @@ void initialize_renderer(void)
     glGetError();
 
     initialize_rendering_settings();
+    initialize_fields();
     initialize_transformation();
     initialize_textures();
     initialize_field_textures();
@@ -63,6 +64,7 @@ void sync_renderer(void)
 
 void cleanup_renderer(void)
 {
+    cleanup_fields();
     cleanup_planes();
     cleanup_transfer_functions();
     cleanup_field_textures();
@@ -122,15 +124,16 @@ static void initialize_rendering_settings(void)
 
 static void initialize_single_field_rendering(void)
 {
-    Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
-                                     "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    Field* const field = create_field_from_bifrost_file("temperature_field",
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
     //clip_field_values(&field, 0.0f, field.max_value*0.04f);
 
-    const char* texture_name = add_scalar_field_texture(&field, &shader_program);
-    const char* TF_name = add_transfer_function(&shader_program);
+    const char* texture_name = create_scalar_field_texture(field, &shader_program);
+    const char* TF_name = create_transfer_function(&shader_program);
 
     /*const float low = 0.0f;//field_value_to_normalized_value(&field, 0);
     const float high = 0.2f;
@@ -155,5 +158,5 @@ static void initialize_single_field_rendering(void)
     update_view_distance(2.0f);
     update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f);
 
-    create_planes(field.size_x, field.size_y, field.size_z, field.extent_x, field.extent_y, field.extent_z, 0.5f);
+    create_planes(field->size_x, field->size_y, field->size_z, field->extent_x, field->extent_y, field->extent_z, 0.5f);
 }
