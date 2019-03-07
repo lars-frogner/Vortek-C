@@ -2,18 +2,33 @@
 
 #include "error.h"
 #include "io.h"
+#include "hash_map.h"
 
 #include <stdlib.h>
 #include <float.h>
 
 
+static Field* create_field(const char* name,
+                           enum field_type type, float* data,
+                           size_t size_x, size_t size_y, size_t size_z,
+                           float extent_x, float extent_y, float extent_z);
 static size_t get_field_array_length(const Field* field);
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value);
 static void scale_float_array(float* array, size_t length, float zero_value, float unity_value);
+static void clear_field(Field* field);
 
 
-Field read_bifrost_field(const char* data_filename, const char* header_filename)
+static HashMap fields;
+
+
+void initialize_fields(void)
 {
+    fields = create_map();
+}
+
+Field* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename)
+{
+    check(name);
     check(data_filename);
     check(header_filename);
 
@@ -81,64 +96,45 @@ Field read_bifrost_field(const char* data_filename, const char* header_filename)
     const float extent_y = (size_y - 1)*dy;
     const float extent_z = (size_z - 1)*dz;
 
-    return create_field(SCALAR_FIELD, data, size_x, size_y, size_z, extent_x, extent_y, extent_z);
+    return create_field(name, SCALAR_FIELD, data, size_x, size_y, size_z, extent_x, extent_y, extent_z);
 }
 
-Field create_field(enum field_type type, float* data,
-                   size_t size_x, size_t size_y, size_t size_z,
-                   float extent_x, float extent_y, float extent_z)
+Field* get_field(const char* name)
 {
-    check(data);
+    check(name);
 
-    Field field;
-
-    field.data = data;
-    field.type = type;
-    field.size_x = size_x;
-    field.size_y = size_y;
-    field.size_z = size_z;
-    field.extent_x = extent_x;
-    field.extent_y = extent_y;
-    field.extent_z = extent_z;
-
-    const size_t length = get_field_array_length(&field);
-
-    find_float_array_limits(data, length, &field.min_value, &field.max_value);
-
-    scale_float_array(data, length, field.min_value, field.max_value);
-
-    field.lower_clip_value = field.min_value;
-    field.upper_clip_value = field.max_value;
+    MapItem item = get_map_item(&fields, name);
+    assert(item.size == sizeof(Field));
+    Field* const field = (Field*)item.data;
+    check(field);
 
     return field;
 }
 
-void reset_field(Field* field)
+void destroy_field(const char* name)
 {
-    check(field);
-
-    if (field->data)
-        free(field->data);
-
-    field->data = NULL;
-    field->type = NULL_FIELD;
-    field->size_x = 0;
-    field->size_y = 0;
-    field->size_z = 0;
-    field->extent_x = 0;
-    field->extent_y = 0;
-    field->extent_z = 0;
-    field->min_value = 0;
-    field->max_value = 0;
-    field->lower_clip_value = 0;
-    field->upper_clip_value = 0;
+    Field* const field = get_field(name);
+    clear_field(field);
+    remove_map_item(&fields, name);
 }
 
-void clip_field_values(Field* field, float lower_clip_value, float upper_clip_value)
+void cleanup_fields(void)
 {
-    check(field);
-    check(field->data);
+    for (reset_map_iterator(&fields); valid_map_iterator(&fields); advance_map_iterator(&fields))
+    {
+        Field* const field = get_field(get_current_map_key(&fields));
+        clear_field(field);
+    }
+
+    destroy_map(&fields);
+}
+
+void clip_field_values(const char* name, float lower_clip_value, float upper_clip_value)
+{
     check(upper_clip_value > lower_clip_value);
+
+    Field* const field = get_field(name);
+    check(field->data);
 
     const float scale = 1.0f/(field->upper_clip_value - field->lower_clip_value);
     const float new_zero_value = (lower_clip_value - field->lower_clip_value)*scale;
@@ -150,18 +146,50 @@ void clip_field_values(Field* field, float lower_clip_value, float upper_clip_va
     field->upper_clip_value = upper_clip_value;
 }
 
-float field_value_to_normalized_value(const Field* field, float field_value)
+float field_value_to_normalized_value(const char* name, float field_value)
 {
-    check(field);
+    Field* const field = get_field(name);
     check(field->upper_clip_value > field->lower_clip_value);
     return (field_value - field->lower_clip_value)/(field->upper_clip_value - field->lower_clip_value);
 }
 
-float normalized_value_to_field_value(const Field* field, float normalized_value)
+float normalized_value_to_field_value(const char* name, float normalized_value)
 {
-    check(field);
+    Field* const field = get_field(name);
     check(field->upper_clip_value > field->lower_clip_value);
     return field->lower_clip_value + normalized_value*(field->upper_clip_value - field->lower_clip_value);
+}
+
+static Field* create_field(const char* name,
+                           enum field_type type, float* data,
+                           size_t size_x, size_t size_y, size_t size_z,
+                           float extent_x, float extent_y, float extent_z)
+{
+    check(name);
+    check(data);
+
+    MapItem item = insert_new_map_item(&fields, name, sizeof(Field));
+    Field* const field = (Field*)item.data;
+
+    field->data = data;
+    field->type = type;
+    field->size_x = size_x;
+    field->size_y = size_y;
+    field->size_z = size_z;
+    field->extent_x = extent_x;
+    field->extent_y = extent_y;
+    field->extent_z = extent_z;
+
+    const size_t length = get_field_array_length(field);
+
+    find_float_array_limits(data, length, &field->min_value, &field->max_value);
+
+    scale_float_array(data, length, field->min_value, field->max_value);
+
+    field->lower_clip_value = field->min_value;
+    field->upper_clip_value = field->max_value;
+
+    return field;
 }
 
 static size_t get_field_array_length(const Field* field)
@@ -210,4 +238,25 @@ static void scale_float_array(float* array, size_t length, float zero_value, flo
 
     for (i = 0; i < length; i++)
         array[i] = (array[i] - zero_value)*scale;
+}
+
+static void clear_field(Field* field)
+{
+    check(field);
+
+    if (field->data)
+        free(field->data);
+
+    field->data = NULL;
+    field->type = NULL_FIELD;
+    field->size_x = 0;
+    field->size_y = 0;
+    field->size_z = 0;
+    field->extent_x = 0;
+    field->extent_y = 0;
+    field->extent_z = 0;
+    field->min_value = 0;
+    field->max_value = 0;
+    field->lower_clip_value = 0;
+    field->upper_clip_value = 0;
 }

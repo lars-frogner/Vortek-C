@@ -21,17 +21,18 @@ typedef struct Field
     float upper_clip_value;
 } Field;
 
-Field read_bifrost_field(const char* data_filename, const char* header_filename);
+void initialize_fields(void);
 
-Field create_field(enum field_type type, float* data,
-                   size_t size_x, size_t size_y, size_t size_z,
-                   float extent_x, float extent_y, float extent_z);
+Field* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename);
 
-void reset_field(Field* field);
+Field* get_field(const char* name);
 
-void clip_field_values(Field* field, float lower_clip_value, float upper_clip_value);
+void destroy_field(const char* name);
+void cleanup_fields(void);
 
-float field_value_to_normalized_value(const Field* field, float field_value);
-float normalized_value_to_field_value(const Field* field, float normalized_value);
+void clip_field_values(const char* name, float lower_clip_value, float upper_clip_value);
+
+float field_value_to_normalized_value(const char* name, float field_value);
+float normalized_value_to_field_value(const char* name, float normalized_value);
 
 #endif
