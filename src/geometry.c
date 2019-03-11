@@ -85,6 +85,43 @@ Vector4f create_vector4f(float x, float y, float z, float w)
     return result;
 }
 
+Vector4f extend_vector3f_to_vector4f(const Vector3f* v, float w)
+{
+    Vector4f result = {{v->a[0], v->a[1], v->a[2], w}};
+    return result;
+}
+
+Vector3f extract_vector3f_from_vector4f(const Vector4f* v)
+{
+    Vector3f result = {{v->a[0], v->a[1], v->a[2]}};
+    return result;
+}
+
+void set_matrix4f_elements(Matrix4f* m,
+                           float a11, float a12, float a13, float a14,
+                           float a21, float a22, float a23, float a24,
+                           float a31, float a32, float a33, float a34,
+                           float a41, float a42, float a43, float a44)
+{
+    assert(m);
+    m->a[0] = a11;
+    m->a[1] = a12;
+    m->a[2] = a13;
+    m->a[3] = a14;
+    m->a[4] = a21;
+    m->a[5] = a22;
+    m->a[6] = a23;
+    m->a[7] = a24;
+    m->a[8] = a31;
+    m->a[9] = a32;
+    m->a[10] = a33;
+    m->a[11] = a34;
+    m->a[12] = a41;
+    m->a[13] = a42;
+    m->a[14] = a43;
+    m->a[15] = a44;
+}
+
 void set_vector2f_elements(Vector2f* v, float x, float y)
 {
     assert(v);
@@ -115,6 +152,18 @@ void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w)
     v->a[1] = y;
     v->a[2] = z;
     v->a[3] = w;
+}
+
+void copy_vector3f(const Vector3f* source, Vector3f* destination)
+{
+    destination->a[0] = source->a[0];
+    destination->a[1] = source->a[1];
+    destination->a[2] = source->a[2];
+}
+
+int equal_vector3f(const Vector3f* v1, const Vector3f* v2)
+{
+    return (v1->a[0] == v2->a[0]) && (v1->a[1] == v2->a[1]) && (v1->a[2] == v2->a[2]);
 }
 
 Vector3 add_vector3(const Vector3* v1, const Vector3* v2)
@@ -247,6 +296,194 @@ Vector4f matvecmul4f(const Matrix4f* m, const Vector4f* v)
     return result;
 }
 
+void invert_matrix4f(Matrix4f* m)
+{
+    assert(m);
+
+    const float a11 = m->a[ 0];
+    const float a12 = m->a[ 1];
+    const float a13 = m->a[ 2];
+    const float a14 = m->a[ 3];
+    const float a21 = m->a[ 4];
+    const float a22 = m->a[ 5];
+    const float a23 = m->a[ 6];
+    const float a24 = m->a[ 7];
+    const float a31 = m->a[ 8];
+    const float a32 = m->a[ 9];
+    const float a33 = m->a[10];
+    const float a34 = m->a[11];
+    const float a41 = m->a[12];
+    const float a42 = m->a[13];
+    const float a43 = m->a[14];
+    const float a44 = m->a[15];
+
+    float b11, b12, b13, b14,
+          b21, b22, b23, b24,
+          b31, b32, b33, b34,
+          b41, b42, b43, b44;
+
+    b11 = a22*a33*a44 -
+          a22*a34*a43 -
+          a32*a23*a44 +
+          a32*a24*a43 +
+          a42*a23*a34 -
+          a42*a24*a33;
+
+    b21 = -a21*a33*a44 +
+           a21*a34*a43 +
+           a31*a23*a44 -
+           a31*a24*a43 -
+           a41*a23*a34 +
+           a41*a24*a33;
+
+    b31 = a21*a32*a44 -
+          a21*a34*a42 -
+          a31*a22*a44 +
+          a31*a24*a42 +
+          a41*a22*a34 -
+          a41*a24*a32;
+
+    b41 = -a21*a32*a43 +
+           a21*a33*a42 +
+           a31*a22*a43 -
+           a31*a23*a42 -
+           a41*a22*a33 +
+           a41*a23*a32;
+
+    b12 = -a12*a33*a44 +
+           a12*a34*a43 +
+           a32*a13*a44 -
+           a32*a14*a43 -
+           a42*a13*a34 +
+           a42*a14*a33;
+
+    b22 = a11*a33*a44 -
+          a11*a34*a43 -
+          a31*a13*a44 +
+          a31*a14*a43 +
+          a41*a13*a34 -
+          a41*a14*a33;
+
+    b32 = -a11*a32*a44 +
+           a11*a34*a42 +
+           a31*a12*a44 -
+           a31*a14*a42 -
+           a41*a12*a34 +
+           a41*a14*a32;
+
+    b42 = a11*a32*a43 -
+          a11*a33*a42 -
+          a31*a12*a43 +
+          a31*a13*a42 +
+          a41*a12*a33 -
+          a41*a13*a32;
+
+    b13 = a12*a23*a44 -
+          a12*a24*a43 -
+          a22*a13*a44 +
+          a22*a14*a43 +
+          a42*a13*a24 -
+          a42*a14*a23;
+
+    b23 = -a11*a23*a44 +
+           a11*a24*a43 +
+           a21*a13*a44 -
+           a21*a14*a43 -
+           a41*a13*a24 +
+           a41*a14*a23;
+
+    b33 = a11*a22*a44 -
+          a11*a24*a42 -
+          a21*a12*a44 +
+          a21*a14*a42 +
+          a41*a12*a24 -
+          a41*a14*a22;
+
+    b43 = -a11*a22*a43 +
+           a11*a23*a42 +
+           a21*a12*a43 -
+           a21*a13*a42 -
+           a41*a12*a23 +
+           a41*a13*a22;
+
+    b14 = -a12*a23*a34 +
+           a12*a24*a33 +
+           a22*a13*a34 -
+           a22*a14*a33 -
+           a32*a13*a24 +
+           a32*a14*a23;
+
+    b24 = a11*a23*a34 -
+          a11*a24*a33 -
+          a21*a13*a34 +
+          a21*a14*a33 +
+          a31*a13*a24 -
+          a31*a14*a23;
+
+    b34 = -a11*a22*a34 +
+           a11*a24*a32 +
+           a21*a12*a34 -
+           a21*a14*a32 -
+           a31*a12*a24 +
+           a31*a14*a22;
+
+    b44 = a11*a22*a33 -
+          a11*a23*a32 -
+          a21*a12*a33 +
+          a21*a13*a32 +
+          a31*a12*a23 -
+          a31*a13*a22;
+
+    float inv_det = a11*b11 + a12*b21 + a13*b31 + a14*b41;
+
+    // Make sure matrix is invertible (non-zero determinant)
+    assert(inv_det != 0);
+
+    inv_det = 1.0f/inv_det;
+
+    set_matrix4f_elements(m,
+                          b11*inv_det, b12*inv_det, b13*inv_det, b14*inv_det,
+                          b21*inv_det, b22*inv_det, b23*inv_det, b24*inv_det,
+                          b31*inv_det, b32*inv_det, b33*inv_det, b34*inv_det,
+                          b41*inv_det, b42*inv_det, b43*inv_det, b44*inv_det);
+}
+
+void invert_matrix4f_3x3_submatrix(Matrix4f* m)
+{
+    assert(m);
+
+    const float a11 = m->a[ 0];
+    const float a12 = m->a[ 1];
+    const float a13 = m->a[ 2];
+    const float a21 = m->a[ 4];
+    const float a22 = m->a[ 5];
+    const float a23 = m->a[ 6];
+    const float a31 = m->a[ 8];
+    const float a32 = m->a[ 9];
+    const float a33 = m->a[10];
+
+    const float diff1 = a22*a33 - a23*a32;
+    const float diff2 = a23*a31 - a21*a33;
+    const float diff3 = a21*a32 - a22*a31;
+
+    // Make sure matrix is invertible (non-zero determinant)
+    float inv_det = a11*diff1 + a12*diff2 + a13*diff3;
+
+    assert(inv_det != 0);
+
+    inv_det = 1.0f/inv_det;
+
+    m->a[ 0] =               diff1*inv_det;
+    m->a[ 1] = (a13*a32 - a12*a33)*inv_det;
+    m->a[ 2] = (a12*a23 - a13*a22)*inv_det;
+    m->a[ 4] =               diff2*inv_det;
+    m->a[ 5] = (a11*a33 - a13*a31)*inv_det;
+    m->a[ 6] = (a13*a21 - a11*a23)*inv_det;
+    m->a[ 8] =               diff3*inv_det;
+    m->a[ 9] = (a12*a31 - a11*a32)*inv_det;
+    m->a[10] = (a11*a22 - a12*a21)*inv_det;
+}
+
 void normalize_vector3(Vector3* v)
 {
     assert(v);
@@ -287,6 +524,46 @@ void get_matrix4f_x_y_z_basis_vectors(const Matrix4f* m, Vector3f* x_basis_vecto
     z_basis_vector->a[0] = m->a[ 2];
     z_basis_vector->a[1] = m->a[ 6];
     z_basis_vector->a[2] = m->a[10];
+}
+
+void get_matrix4f_x_basis_vector(const Matrix4f* m, Vector3f* x_basis_vector)
+{
+    assert(m);
+    assert(x_basis_vector);
+
+    x_basis_vector->a[0] = m->a[ 0];
+    x_basis_vector->a[1] = m->a[ 4];
+    x_basis_vector->a[2] = m->a[ 8];
+}
+
+void get_matrix4f_y_basis_vector(const Matrix4f* m, Vector3f* y_basis_vector)
+{
+    assert(m);
+    assert(y_basis_vector);
+
+    y_basis_vector->a[0] = m->a[ 1];
+    y_basis_vector->a[1] = m->a[ 5];
+    y_basis_vector->a[2] = m->a[ 9];
+}
+
+void get_matrix4f_z_basis_vector(const Matrix4f* m, Vector3f* z_basis_vector)
+{
+    assert(m);
+    assert(z_basis_vector);
+
+    z_basis_vector->a[0] = m->a[ 2];
+    z_basis_vector->a[1] = m->a[ 6];
+    z_basis_vector->a[2] = m->a[10];
+}
+
+void get_matrix4f_w_basis_vector(const Matrix4f* m, Vector3f* w_basis_vector)
+{
+    assert(m);
+    assert(w_basis_vector);
+
+    w_basis_vector->a[0] = m->a[ 3];
+    w_basis_vector->a[1] = m->a[ 7];
+    w_basis_vector->a[2] = m->a[11];
 }
 
 Matrix4f create_scaling_transform(float sx, float sy, float sz)
@@ -526,4 +803,12 @@ void apply_rotation_about_axis(Matrix4f* m, const Vector3f* axis, float angle)
 
     const Matrix4f rotation = create_rotation_about_axis_transform(axis, angle);
     *m = matmul4f(&rotation, m);
+}
+
+void set_transform_translation(Matrix4f* m, float dx, float dy, float dz)
+{
+    assert(m);
+    m->a[ 3] = dx;
+    m->a[ 7] = dy;
+    m->a[11] = dz;
 }

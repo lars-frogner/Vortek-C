@@ -40,11 +40,22 @@ Vector2f create_vector2f(float x, float y);
 Vector3 create_vector3(double x, double y, double z);
 Vector3f create_vector3f(float x, float y, float z);
 Vector4f create_vector4f(float x, float y, float z, float w);
+Vector4f extend_vector3f_to_vector4f(const Vector3f* v, float w);
+Vector3f extract_vector3f_from_vector4f(const Vector4f* v);
 
+void set_matrix4f_elements(Matrix4f* m,
+                           float a11, float a12, float a13, float a14,
+                           float a21, float a22, float a23, float a24,
+                           float a31, float a32, float a33, float a34,
+                           float a41, float a42, float a43, float a44);
 void set_vector2f_elements(Vector2f* v, float x, float y);
 void set_vector3_elements(Vector3* v, double x, double y, double z);
 void set_vector3f_elements(Vector3f* v, float x, float y, float z);
 void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w);
+
+void copy_vector3f(const Vector3f* source, Vector3f* destination);
+
+int equal_vector3f(const Vector3f* v1, const Vector3f* v2);
 
 Vector3 add_vector3(const Vector3* v1, const Vector3* v2);
 Vector3 subtract_vector3(const Vector3* v1, const Vector3* v2);
@@ -67,9 +78,15 @@ void normalize_vector3(Vector3* v);
 void normalize_vector3f(Vector3f* v);
 
 void get_matrix4f_x_y_z_basis_vectors(const Matrix4f* m, Vector3f* x_basis_vector, Vector3f* y_basis_vector, Vector3f* z_basis_vector);
+void get_matrix4f_x_basis_vector(const Matrix4f* m, Vector3f* x_basis_vector);
+void get_matrix4f_y_basis_vector(const Matrix4f* m, Vector3f* y_basis_vector);
+void get_matrix4f_z_basis_vector(const Matrix4f* m, Vector3f* z_basis_vector);
+void get_matrix4f_w_basis_vector(const Matrix4f* m, Vector3f* w_basis_vector);
 
 Matrix4f matmul4f(const Matrix4f* m1, const Matrix4f* m2);
 Vector4f matvecmul4f(const Matrix4f* m, const Vector4f* v);
+void invert_matrix4f(Matrix4f* m);
+void invert_matrix4f_3x3_submatrix(Matrix4f* m);
 
 Matrix4f create_scaling_transform(float sx, float sy, float sz);
 Matrix4f create_translation_transform(float dx, float dy, float dz);
@@ -85,5 +102,7 @@ void apply_rotation_about_x(Matrix4f* m, float angle);
 void apply_rotation_about_y(Matrix4f* m, float angle);
 void apply_rotation_about_z(Matrix4f* m, float angle);
 void apply_rotation_about_axis(Matrix4f* m, const Vector3f* axis, float angle);
+
+void set_transform_translation(Matrix4f* m, float dx, float dy, float dz);
 
 #endif
