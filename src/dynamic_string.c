@@ -8,7 +8,7 @@
 #include <string.h>
 
 
-DynamicString create_string(void)
+DynamicString create_empty_string(void)
 {
     DynamicString string;
     string.chars = NULL;
@@ -30,6 +30,34 @@ DynamicString create_duplicate_string(const DynamicString* source_string)
     destination_string.length = source_string->length;
 
     return destination_string;
+}
+
+DynamicString create_string(const char* chars, ...)
+{
+    check(chars);
+
+    DynamicString string;
+
+    va_list args;
+
+    // Perform "dry run" of formatted printing to obtain the length of the resulting string
+    va_start(args, chars);
+    const int length = vsnprintf(NULL, 0, chars, args);
+    va_end(args);
+
+    check(length > 0);
+    string.length = (size_t)length;
+    string.size = sizeof(char)*(string.length + 1);
+
+    // Allocate the required amount of memory to hold the formatted expression
+    string.chars = (char*)malloc(string.size);
+
+    // Perform the actual formatted printing
+    va_start(args, chars);
+    vsprintf(string.chars, chars, args);
+    va_end(args);
+
+    return string;
 }
 
 void copy_string(DynamicString* destination_string, const DynamicString* source_string)
