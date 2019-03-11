@@ -86,8 +86,6 @@ Field* create_field_from_bifrost_file(const char* name, const char* data_filenam
     const size_t size_y = (size_t)signed_size_y;
     const size_t size_z = (size_t)signed_size_z;
 
-    print_info_message("%d, %d, %d", size_x, size_y, size_z);
-
     const size_t length = size_x*size_y*size_z;
 
     float* data = (float*)read_binary_file(data_filename, length, sizeof(float));

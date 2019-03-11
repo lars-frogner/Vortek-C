@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-enum field_type {NULL_FIELD, SCALAR_FIELD, VECTOR_FIELD};
+enum field_type {NULL_FIELD = 0, SCALAR_FIELD = 1, VECTOR_FIELD = 2};
 
 typedef struct Field
 {
