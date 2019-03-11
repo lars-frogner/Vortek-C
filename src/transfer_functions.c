@@ -263,14 +263,14 @@ static void transfer_transfer_function_texture(TransferFunctionTexture* transfer
     check(transfer_function_texture);
     check(transfer_function_texture->texture);
 
+    glActiveTexture(GL_TEXTURE0 + transfer_function_texture->texture->unit);
+    abort_on_GL_error("Could not set active texture unit for transfer function");
+
     ListItem item = append_new_list_item(&transfer_function_texture->texture->ids, sizeof(GLuint));
     GLuint* const id = (GLuint*)item.data;
 
     glGenTextures(1, id);
     abort_on_GL_error("Could not generate texture object for transfer function");
-
-    glActiveTexture(GL_TEXTURE0 + transfer_function_texture->texture->unit);
-    abort_on_GL_error("Could not set active texture unit for transfer function");
 
     glBindTexture(GL_TEXTURE_1D, *id);
     abort_on_GL_error("Could not bind 1D texture for transfer function");

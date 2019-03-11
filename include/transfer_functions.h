@@ -13,7 +13,6 @@ const char* create_transfer_function(ShaderProgram* shader_program);
 
 void add_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                  float texture_coordinate, float value);
-
 void remove_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                     float texture_coordinate);
 
@@ -21,10 +20,9 @@ void set_logarithmic_transfer_function(const char* name, enum transfer_function_
                                        float start_texture_coordinate, float end_texture_coordinate,
                                        float start_value, float end_value);
 
-void remove_transfer_function(const char* name);
-
 void sync_transfer_functions(void);
 
+void remove_transfer_function(const char* name);
 void cleanup_transfer_functions(void);
 
 #endif
