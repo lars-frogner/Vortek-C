@@ -14,8 +14,11 @@ typedef struct Texture
 } Texture;
 
 void initialize_textures(void);
+
 Texture* create_texture(void);
+
 void load_textures(const ShaderProgram* shader_program);
+
 void destroy_texture(Texture* texture);
 void cleanup_textures(void);
 

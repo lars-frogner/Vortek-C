@@ -41,8 +41,7 @@ Texture* create_texture(void)
 
     texture.unit = unit;
     texture.ids = create_list();
-    texture.name = create_string();
-    set_string(&texture.name, "texture_%d", unit);
+    texture.name = create_string("texture_%d", unit);
 
     MapItem item = insert_new_map_item(&textures, texture.name.chars, sizeof(ExtendedTexture));
 
@@ -133,7 +132,7 @@ static void set_texture_uniform(ExtendedTexture* extended_texture, const ShaderP
 
     if (extended_texture->uniform_location == -1)
     {
-        print_warning_message("Texture \"%s\" not used in shader program", extended_texture->texture.name.chars);
+        print_warning_message("Texture \"%s\" not used in shader program.", extended_texture->texture.name.chars);
         return;
     }
 
