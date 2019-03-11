@@ -5,3 +5,6 @@
 external/
 obj/
 .d/
+old/
+literature/
+temp_shaders/
