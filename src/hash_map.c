@@ -249,7 +249,7 @@ static void allocate_map(HashMap* map, size_t base_size)
     assert(map);
 
     map->base_size = base_size;
-    map->size = next_prime(base_size);
+    map->size = next_prime(base_size); // Use a prime number as the actual size
     map->length = 0;
     map->iterator = NULL;
 
@@ -283,6 +283,7 @@ static void resize_map(HashMap* map, size_t base_size)
 
     MapEntry* entry = NULL;
 
+    // Loop through the old map and insert all existing non-deleted entries into the new map
     size_t i;
     for (i = 0; i < old_map.size; i++)
     {
@@ -318,21 +319,24 @@ static void insert_entry(HashMap* map, MapEntry* entry)
     assert(map->length < map->size);
 
     unsigned int attempt = 0;
-    size_t hash = compute_map_key_index(entry->key, map->size, attempt++);
+    size_t idx = compute_map_key_index(entry->key, map->size, attempt++);
 
-    while (map->entries[hash] != NULL && map->entries[hash] != &DELETED_MAP_ENTRY)
+    // Visit entries until we encounter an empty or deleted one
+    while (map->entries[idx] != NULL && map->entries[idx] != &DELETED_MAP_ENTRY)
     {
-        if (strcmp(map->entries[hash]->key, entry->key) == 0)
+        // If an existing entry already uses the key we want to insert for, remove it before the new entry is inserted
+        if (strcmp(map->entries[idx]->key, entry->key) == 0)
         {
-            free_entry(map->entries[hash]);
+            free_entry(map->entries[idx]);
             map->length--;
             break;
         }
 
-        hash = compute_map_key_index(entry->key, map->size, attempt++);
+        idx = compute_map_key_index(entry->key, map->size, attempt++);
     }
 
-    map->entries[hash] = entry;
+    // Insert the new entry when we have found a free location
+    map->entries[idx] = entry;
     map->length++;
     map->iterator = NULL;
 }
@@ -356,16 +360,22 @@ static long find_key_location(const HashMap* map, const char* key)
     assert(map);
     assert(key);
 
-    long location = -1;
+    long location = -1; // We will return -1 if the entry for the given key does not exist
     unsigned int attempt = 0;
-    size_t hash = compute_map_key_index(key, map->size, attempt++);
+    size_t idx = compute_map_key_index(key, map->size, attempt++);
 
-    while (map->entries[hash] != NULL)
+    // Visit entries until we encounter an empty one (if we do, the requested entry does not exist)
+    while (map->entries[idx] != NULL)
     {
-        if (map->entries[hash] != &DELETED_MAP_ENTRY && strcmp(map->entries[hash]->key, key) == 0)
-            location = (long)hash;
+        // If the occupied entry is not deleted and has the right key, return the index
+        if (map->entries[idx] != &DELETED_MAP_ENTRY && strcmp(map->entries[idx]->key, key) == 0)
+        {
+            location = (long)idx;
+            break;
+        }
 
-        hash = compute_map_key_index(key, map->size, attempt++);
+        // If the occupied entry was not the right one, increment the attempt number and compute the next index
+        idx = compute_map_key_index(key, map->size, attempt++);
     }
 
     return location;
@@ -373,6 +383,11 @@ static long find_key_location(const HashMap* map, const char* key)
 
 static size_t compute_map_key_index(const char* key, size_t upper_limit, unsigned int attempt)
 {
+    /*
+    Uses double hashing to compute a new index from the same key each time the
+    attempt number is incremented. This addresses the problem of collisions when
+    multiple keys give the same hash.
+    */
     assert(attempt < upper_limit*upper_limit);
     const size_t hash_1 = compute_key_hash(key, HASH_MAP_PRIME_1, upper_limit);
     const size_t hash_2 = compute_key_hash(key, HASH_MAP_PRIME_2, upper_limit - 1);
