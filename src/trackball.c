@@ -4,6 +4,7 @@
 #include "extra_math.h"
 #include "geometry.h"
 #include "transformation.h"
+#include "view_aligned_planes.h"
 #include "renderer.h"
 
 #include <math.h>
@@ -17,10 +18,13 @@ static void screen_coords_to_trackball_coords(double screen_coord_x, double scre
 
 
 static const double zoom_rate_modifier = 1e-2;
+static const float plane_separation_modifier = 1.0f;
 
 static double trackball_radius = 1.0;
 
 static Vector3 previous_trackball_point = {{0}};
+
+static float current_plane_separation;
 
 
 void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
@@ -31,6 +35,9 @@ void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, 
     double x, y;
     screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
     previous_trackball_point = compute_trackball_point(x, y);
+
+    current_plane_separation = get_plane_separation();
+    set_plane_separation(current_plane_separation*plane_separation_modifier);
 }
 
 void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
@@ -48,10 +55,15 @@ void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y,
 
     const float rotation_angle = (float)acos(dot3(&previous_trackball_point, &current_trackball_point));
 
-    apply_model_rotation_about_axis(&rotation_axisf, rotation_angle);
+    apply_origin_centered_view_rotation_about_axis(&rotation_axisf, rotation_angle);
     sync_renderer();
 
     previous_trackball_point = current_trackball_point;
+}
+
+void trackball_leftrelease_callback(void)
+{
+    set_plane_separation(current_plane_separation);
 }
 
 void trackball_zoom_callback(double zoom_rate)

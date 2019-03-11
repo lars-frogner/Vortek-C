@@ -193,6 +193,7 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
         else if (action == GLFW_RELEASE)
         {
             mouse_is_pressed = 0;
+            trackball_leftrelease_callback();
         }
     }
 }
