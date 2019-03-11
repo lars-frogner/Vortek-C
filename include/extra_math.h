@@ -8,8 +8,11 @@ extern const double PI;
 int imax(int a, int b);
 int imin(int a, int b);
 
-size_t max_size(size_t a, size_t b);
-size_t min_size(size_t a, size_t b);
+unsigned int uimax(unsigned int a, unsigned int b);
+unsigned int uimin(unsigned int a, unsigned int b);
+
+size_t max_size_t(size_t a, size_t b);
+size_t min_size_t(size_t a, size_t b);
 
 unsigned int argfmax3(float x, float y, float z);
 

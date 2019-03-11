@@ -18,12 +18,22 @@ int imin(int a, int b)
     return (a <= b) ? a : b;
 }
 
-size_t max_size(size_t a, size_t b)
+unsigned int uimax(unsigned int a, unsigned int b)
 {
     return (a >= b) ? a : b;
 }
 
-size_t min_size(size_t a, size_t b)
+unsigned int uimin(unsigned int a, unsigned int b)
+{
+    return (a <= b) ? a : b;
+}
+
+size_t max_size_t(size_t a, size_t b)
+{
+    return (a >= b) ? a : b;
+}
+
+size_t min_size_t(size_t a, size_t b)
 {
     return (a <= b) ? a : b;
 }
@@ -66,6 +76,7 @@ unsigned int floored_log2_size_t(size_t number)
 
 size_t closest_ge_pow2_size_t(size_t number)
 {
+    // Returns the next power of 2 number that is either equal to or greater than the given number
     assert(number > 0);
     const size_t result = pow2_size_t(floored_log2_size_t(number));
     return (result < number) ? 2*result : result;
@@ -91,7 +102,7 @@ float radians_to_regrees(float radians)
 int is_prime(size_t n)
 {
     if (n < 2)
-        return -1;
+        return -1; // Return negative number for invalid input
 
     if (n < 4)
         return 1;
@@ -114,8 +125,8 @@ int is_prime(size_t n)
 
 size_t next_prime(size_t n)
 {
+    // Returns the next prime that is greater than or equal to the given number
     while (is_prime(n) != 1)
         n++;
-
     return n;
 }
