@@ -8,7 +8,7 @@
 #include "texture.h"
 #include "field_textures.h"
 #include "transfer_functions.h"
-#include "axis_aligned_planes.h"
+#include "view_aligned_planes.h"
 #include "shader_generator.h"
 
 
@@ -28,7 +28,6 @@ static WindowShape window_shape;
 static ShaderProgram shader_program;
 
 
-
 void initialize_renderer(void)
 {
     print_info_message("OpenGL Version: %s", glGetString(GL_VERSION));
@@ -38,6 +37,7 @@ void initialize_renderer(void)
     initialize_rendering_settings();
     initialize_fields();
     initialize_transformation();
+    initialize_planes();
     initialize_textures();
     initialize_field_textures();
     initialize_transfer_functions();
@@ -51,21 +51,23 @@ void initialize_renderer(void)
     compile_shader_program(&shader_program);
 
     load_textures(&shader_program);
-    load_transform_matrices(&shader_program);
+    load_transformation(&shader_program);
+    load_planes(&shader_program);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 void sync_renderer(void)
 {
-    sync_transform_matrices(&shader_program);
-    sync_planes();
+    sync_transformation(&shader_program);
+    sync_planes(&shader_program);
 }
 
 void cleanup_renderer(void)
 {
-    cleanup_fields();
+    cleanup_transformation();
     cleanup_planes();
+    cleanup_fields();
     cleanup_transfer_functions();
     cleanup_field_textures();
     cleanup_textures();
@@ -86,13 +88,15 @@ void update_renderer_window_size_in_pixels(int width, int height)
 void renderer_update_callback(void)
 {
     sync_transfer_functions();
+    sync_planes(&shader_program);
 
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(shader_program.id);
     abort_on_GL_error("Could not use shader program");
 
-    draw_planes();
+    //draw_planes();
+    draw_brick(0);
 
     glUseProgram(0);
 }
@@ -101,7 +105,7 @@ void renderer_resize_callback(int width, int height)
 {
     update_renderer_window_size_in_pixels(width, height);
     update_camera_aspect_ratio((float)width/height);
-    sync_transform_matrices(&shader_program);
+    sync_transformation(&shader_program);
 }
 
 void renderer_key_action_callback(void)
@@ -112,10 +116,12 @@ static void initialize_rendering_settings(void)
     glDisable(GL_DEPTH_TEST);
     abort_on_GL_error("Could not disable depth testing");
 
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
-    abort_on_GL_error("Could not set face culling options");
+    //glEnable(GL_CULL_FACE);
+    //glCullFace(GL_BACK);
+    //glFrontFace(GL_CCW);
+    //abort_on_GL_error("Could not set face culling options");
+
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -127,6 +133,7 @@ static void initialize_single_field_rendering(void)
     Field* const field = create_field_from_bifrost_file("temperature_field",
                                                         "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
                                                         "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    field->extent_z = field->extent_x;
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
@@ -151,12 +158,14 @@ static void initialize_single_field_rendering(void)
     set_logarithmic_transfer_function(TF_name, TF_BLUE,  0, 1, 0, 1);
     set_logarithmic_transfer_function(TF_name, TF_ALPHA, 0, 1, 0, 1);
 
-    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&shader_program.fragment_shader_source, texture_name, "tex_coord");
+    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&shader_program.fragment_shader_source, texture_name, "out_tex_coord");
     const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&shader_program.fragment_shader_source, TF_name, field_texture_variable_number);
-    assign_variable_to_vec4_output_in_shader(&shader_program.fragment_shader_source, mapped_field_texture_variable_number, "out_color");
+    assign_variable_to_new_output_in_shader(&shader_program.fragment_shader_source, "vec4", mapped_field_texture_variable_number, "out_color");
 
-    update_view_distance(2.0f);
+    set_view_distance(2.0f);
+
     update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f);
 
-    create_planes(field->size_x, field->size_y, field->size_z, field->extent_x, field->extent_y, field->extent_z, 0.5f);
+    set_active_bricked_field(get_bricked_field_texture(texture_name));
+    set_plane_separation(1.0f);
 }
