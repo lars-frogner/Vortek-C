@@ -4,7 +4,6 @@
 #include "error.h"
 #include "hash_map.h"
 #include "texture.h"
-#include "bricks.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -49,6 +48,12 @@ const char* create_scalar_field_texture(const Field* field, ShaderProgram* shade
     add_field_texture_in_shader(&shader_program->fragment_shader_source, texture->name.chars);
 
     return texture->name.chars;
+}
+
+const BrickedField* get_bricked_field_texture(const char* name)
+{
+    FieldTexture* const field_texture = get_field_texture(name);
+    return &field_texture->bricked_field;
 }
 
 void destroy_field_texture(const char* name)
