@@ -41,7 +41,7 @@ LIBRARY_LINKING_FLAGS = -lglfw
 COMPILATION_FLAGS =
 LINKING_FLAGS =
 
-DEBUGGING_COMPILE_FLAGS = -Og -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter
+DEBUGGING_COMPILE_FLAGS = -g -O0 -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter
 DEBUGGING_LINK_FLAGS =
 
 PERFORMANCE_COMPILE_FLAGS = -O3 -ffast-math
