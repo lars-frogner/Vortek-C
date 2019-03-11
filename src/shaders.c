@@ -83,16 +83,24 @@ void compile_shader_program(ShaderProgram* shader_program)
 {
     check(shader_program);
 
-    const char* vertex_source_string = generate_shader_code(&shader_program->vertex_shader_source);
-    const char* fragment_source_string = generate_shader_code(&shader_program->fragment_shader_source);
+    if (0)
+    {
+        const char* vertex_source_string = generate_shader_code(&shader_program->vertex_shader_source);
+        const char* fragment_source_string = generate_shader_code(&shader_program->fragment_shader_source);
 
-    printf("\n------------------------- Vertex shader -------------------------\n%s-----------------------------------------------------------------\n",
-           vertex_source_string);
-    printf("\n------------------------ Fragment shader ------------------------\n%s-----------------------------------------------------------------\n",
-           fragment_source_string);
+        printf("\n------------------------- Vertex shader -------------------------\n\n%s",
+               vertex_source_string);
+        printf("\n------------------------ Fragment shader ------------------------\n\n%s\n-----------------------------------------------------------------\n\n",
+               fragment_source_string);
 
-    shader_program->vertex_shader_id = load_shader_from_string(vertex_source_string, GL_VERTEX_SHADER);
-    shader_program->fragment_shader_id = load_shader_from_string(fragment_source_string, GL_FRAGMENT_SHADER);
+        shader_program->vertex_shader_id = load_shader_from_string(vertex_source_string, GL_VERTEX_SHADER);
+        shader_program->fragment_shader_id = load_shader_from_string(fragment_source_string, GL_FRAGMENT_SHADER);
+    }
+    else
+    {
+        shader_program->vertex_shader_id = load_shader_from_file("/Users/larsfrog/Dropbox/Code/Rendering/Vortek/temp_shaders/shader.vert", GL_VERTEX_SHADER);
+        shader_program->fragment_shader_id = load_shader_from_file("/Users/larsfrog/Dropbox/Code/Rendering/Vortek/temp_shaders/shader.frag", GL_FRAGMENT_SHADER);
+    }
 
     if (shader_program->vertex_shader_id == 0 ||
         shader_program->fragment_shader_id == 0)
