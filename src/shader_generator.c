@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MAX_GLOBAL_VARIABLE_NAME_SIZE 15
+#define MAX_GLOBAL_VARIABLE_NAME_SIZE 20
 
 
 typedef struct Variable
@@ -33,8 +33,7 @@ static void write_required_variable_expressions(ShaderSource* source, size_t var
 
 static void add_sampler3D_uniform(ShaderSource* source, const char* name);
 static void add_sampler1D_uniform(ShaderSource* source, const char* name);
-static void add_vec3_output(ShaderSource* source, const char* name);
-static void add_vec4_output(ShaderSource* source, const char* name);
+static void add_output(ShaderSource* source, const char* type, const char* name);
 
 static Variable* create_variable(ShaderSource* source);
 static void delete_variable(ShaderSource* source, size_t variable_number);
@@ -50,7 +49,7 @@ static Dependency* get_current_dependency(LinkedList* dependencies);
 void initialize_shader_source(ShaderSource* source)
 {
     check(source);
-    source->code = create_string();
+    source->code = create_empty_string();
     source->global_variable_expressions = create_map();
     source->variables = create_list();
     source->deleted_variables = create_list();
@@ -58,32 +57,36 @@ void initialize_shader_source(ShaderSource* source)
     source->next_undeleted_unused_variable_number = 0;
 }
 
-void add_vec3_input_in_shader(ShaderSource* source, const char* name)
+void add_input_in_shader(ShaderSource* source, const char* type, const char* name)
 {
     check(source);
+    check(type);
     check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "in vec3 %s;\n", name);
+    insert_string_in_map(&source->global_variable_expressions, name, "in %s %s;\n", type, name);
 }
 
-void add_vec3_vertex_input_in_shader(ShaderSource* source, const char* name, unsigned int layout_location)
+void add_vertex_input_in_shader(ShaderSource* source, const char* type, const char* name, unsigned int layout_location)
 {
     check(source);
+    check(type);
     check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "layout(location=%d) in vec3 %s;\n", layout_location, name);
+    insert_string_in_map(&source->global_variable_expressions, name, "layout(location=%d) in %s %s;\n", layout_location, type, name);
 }
 
-void add_vec4_vertex_input_in_shader(ShaderSource* source, const char* name, unsigned int layout_location)
+void add_uniform_in_shader(ShaderSource* source, const char* type, const char* name)
 {
     check(source);
+    check(type);
     check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "layout(location=%d) in vec4 %s;\n", layout_location, name);
+    insert_string_in_map(&source->global_variable_expressions, name, "uniform %s %s;\n", type, name);
 }
 
-void add_mat4_uniform_in_shader(ShaderSource* source, const char* name)
+void add_array_uniform_in_shader(ShaderSource* source, const char* type, const char* name, size_t length)
 {
     check(source);
+    check(type);
     check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "uniform mat4 %s;\n", name);
+    insert_string_in_map(&source->global_variable_expressions, name, "uniform %s %s[%d];\n", type, name, length);
 }
 
 size_t transform_input_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name)
@@ -143,6 +146,36 @@ size_t apply_transfer_function_in_shader(ShaderSource* source, const char* trans
     return variable->number;
 }
 
+size_t add_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet, LinkedList* global_dependencies, LinkedList* variable_dependencies)
+{
+    check(source);
+    check(output_type);
+    check(output_name);
+    check(snippet);
+
+    Variable* const variable = create_variable(source);
+
+    set_string(&variable->expression, "%s\n    %s variable_%d = %s;\n", snippet, output_type, variable->number, output_name);
+
+    if (global_dependencies)
+    {
+        for (reset_list_iterator(global_dependencies); valid_list_iterator(global_dependencies); advance_list_iterator(global_dependencies))
+        {
+            add_global_dependency(variable, get_current_string_from_list(global_dependencies));
+        }
+    }
+
+    if (variable_dependencies)
+    {
+        for (reset_list_iterator(variable_dependencies); valid_list_iterator(variable_dependencies); advance_list_iterator(variable_dependencies))
+        {
+            add_variable_dependency(variable, get_current_size_t_from_list(variable_dependencies));
+        }
+    }
+
+    return variable->number;
+}
+
 void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_number, const char* output_name)
 {
     check(source);
@@ -157,13 +190,31 @@ void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_n
     append_size_t_to_list(&source->output_variables, variable_number);
 }
 
-void assign_variable_to_vec4_output_in_shader(ShaderSource* source, size_t variable_number, const char* output_name)
+void assign_transformed_variable_to_output_in_shader(ShaderSource* source, const char* matrix_name, size_t variable_number, const char* output_name)
 {
     check(source);
+    check(matrix_name);
     check(output_name);
     check(variable_number < source->variables.length);
 
-    add_vec4_output(source, output_name);
+    Variable* const variable = get_variable(&source->variables, variable_number);
+    check(!variable->is_deleted);
+
+    extend_string(&variable->expression, "    %s = %s*variable_%d;\n", output_name, matrix_name, variable_number);
+
+    add_global_dependency(variable, matrix_name);
+
+    append_size_t_to_list(&source->output_variables, variable_number);
+}
+
+void assign_variable_to_new_output_in_shader(ShaderSource* source, const char* type, size_t variable_number, const char* output_name)
+{
+    check(source);
+    check(type);
+    check(output_name);
+    check(variable_number < source->variables.length);
+
+    add_output(source, type, output_name);
 
     Variable* const variable = get_variable(&source->variables, variable_number);
     check(!variable->is_deleted);
@@ -175,13 +226,14 @@ void assign_variable_to_vec4_output_in_shader(ShaderSource* source, size_t varia
     append_size_t_to_list(&source->output_variables, variable_number);
 }
 
-void assign_vec3_input_to_output_in_shader(ShaderSource* source, const char* input_name, const char* output_name)
+void assign_input_to_new_output_in_shader(ShaderSource* source, const char* type, const char* input_name, const char* output_name)
 {
     check(source);
-    check(output_name);
+    check(type);
     check(input_name);
+    check(output_name);
 
-    add_vec3_output(source, output_name);
+    add_output(source, type, output_name);
 
     Variable* const variable = create_variable(source);
 
@@ -374,18 +426,12 @@ static void add_sampler1D_uniform(ShaderSource* source, const char* name)
     insert_string_in_map(&source->global_variable_expressions, name, "uniform sampler1D %s;\n", name);
 }
 
-static void add_vec3_output(ShaderSource* source, const char* name)
+static void add_output(ShaderSource* source, const char* type, const char* name)
 {
     check(source);
+    check(type);
     check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "out vec3 %s;\n", name);
-}
-
-static void add_vec4_output(ShaderSource* source, const char* name)
-{
-    check(source);
-    check(name);
-    insert_string_in_map(&source->global_variable_expressions, name, "out vec4 %s;\n", name);
+    insert_string_in_map(&source->global_variable_expressions, name, "out %s %s;\n", type, name);
 }
 
 static Variable* create_variable(ShaderSource* source)
@@ -412,7 +458,7 @@ static Variable* create_variable(ShaderSource* source)
         ListItem item = insert_new_list_item(&source->variables, variable_number, sizeof(Variable));
         variable = (Variable*)item.data;
 
-        variable->expression = create_string();
+        variable->expression = create_empty_string();
         variable->dependencies = create_list();
     }
 
