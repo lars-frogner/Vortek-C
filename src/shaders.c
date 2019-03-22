@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 
 GLuint load_shader_from_file(const char* filename, GLenum shader_type)
@@ -83,7 +84,7 @@ void compile_shader_program(ShaderProgram* shader_program)
 {
     check(shader_program);
 
-    if (0)
+    if (1)
     {
         const char* vertex_source_string = generate_shader_code(&shader_program->vertex_shader_source);
         const char* fragment_source_string = generate_shader_code(&shader_program->fragment_shader_source);
@@ -147,4 +148,36 @@ void destroy_shader_program(ShaderProgram* shader_program)
     shader_program->id = 0;
     shader_program->vertex_shader_id = 0;
     shader_program->fragment_shader_id = 0;
+}
+
+void initialize_uniform(Uniform* uniform, const char* name, ...)
+{
+    check(uniform);
+    check(name);
+
+    va_list args;
+    va_start(args, name);
+    uniform->name = create_string_from_arg_list(name, args);
+    va_end(args);
+
+    uniform->location = -1;
+    uniform->needs_update = 0;
+}
+
+void load_uniform(const ShaderProgram* shader_program, Uniform* uniform)
+{
+    check(shader_program);
+    check(uniform);
+
+    uniform->location = glGetUniformLocation(shader_program->id, uniform->name.chars);
+    abort_on_GL_error("Could not get location of uniform");
+
+    if (uniform->location == -1)
+        print_warning_message("Uniform \"%s\" not used in shader program.", uniform->name.chars);
+}
+
+void destroy_uniform(Uniform* uniform)
+{
+    check(uniform);
+    clear_string(&uniform->name);
 }
