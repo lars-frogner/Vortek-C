@@ -2,8 +2,10 @@
 
 #include "gl_includes.h"
 #include "error.h"
+#include "dynamic_string.h"
 #include "hash_map.h"
 #include "texture.h"
+#include "shader_generator.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -24,28 +26,36 @@ static void clear_field_texture(FieldTexture* field_texture);
 
 static HashMap field_textures;
 
+static ShaderProgram* active_shader_program = NULL;
+
 
 void initialize_field_textures(void)
 {
     field_textures = create_map();
 }
 
-const char* create_scalar_field_texture(const Field* field, ShaderProgram* shader_program)
+void set_active_shader_program_for_field_textures(ShaderProgram* shader_program)
+{
+    active_shader_program = shader_program;
+}
+
+const char* create_scalar_field_texture(const Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
 {
     check(field);
-    check(shader_program);
+    check(active_shader_program);
 
     Texture* const texture = create_texture();
 
     MapItem item = insert_new_map_item(&field_textures, texture->name.chars, sizeof(FieldTexture));
     FieldTexture* const field_texture = (FieldTexture*)item.data;
 
-    create_bricked_field(&field_texture->bricked_field, field, 8, 1);
+    create_bricked_field(&field_texture->bricked_field, field, brick_size_exponent, kernel_size);
+    field_texture->bricked_field.texture_unit = texture->unit;
     field_texture->texture = texture;
 
     transfer_scalar_field_texture(field_texture);
 
-    add_field_texture_in_shader(&shader_program->fragment_shader_source, texture->name.chars);
+    add_field_texture_in_shader(&active_shader_program->fragment_shader_source, texture->name.chars);
 
     return texture->name.chars;
 }
@@ -56,6 +66,22 @@ const BrickedField* get_bricked_field_texture(const char* name)
     return &field_texture->bricked_field;
 }
 
+float field_value_to_texture_value(const char* name, float field_value)
+{
+    FieldTexture* const field_texture = get_field_texture(name);
+    const Field* const field = field_texture->bricked_field.field;
+    check(field);
+    return (field_value - field->min_value)/(field->max_value - field->min_value);
+}
+
+float texture_value_to_field_value(const char* name, float texture_value)
+{
+    FieldTexture* const field_texture = get_field_texture(name);
+    const Field* const field = field_texture->bricked_field.field;
+    check(field);
+    return field->min_value + texture_value*(field->max_value - field->min_value);
+}
+
 void destroy_field_texture(const char* name)
 {
     FieldTexture* const field_texture = get_field_texture(name);
@@ -64,6 +90,7 @@ void destroy_field_texture(const char* name)
     Texture* const texture = field_texture->texture;
 
     destroy_bricked_field(&field_texture->bricked_field);
+
     remove_map_item(&field_textures, name);
 
     destroy_texture(texture);
@@ -97,7 +124,7 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
     check(field_texture);
     check(field_texture->texture);
 
-    BrickedField* const bricked_field = &field_texture->bricked_field;
+    BrickedField* bricked_field = &field_texture->bricked_field;
     const Field* const field = bricked_field->field;
     check(field);
 
@@ -118,51 +145,43 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
     glActiveTexture(GL_TEXTURE0 + field_texture->texture->unit);
     abort_on_GL_error("Could not set active texture unit");
 
-    ListItem item = append_new_list_item(&field_texture->texture->ids, sizeof(GLuint));
-    GLuint* const id = (GLuint*)item.data;
+    size_t brick_idx;
+    Brick* brick;
+    for (brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        brick = bricked_field->bricks + brick_idx;
 
-    glGenTextures(1, id);
-    abort_on_GL_error("Could not generate texture object");
+        glGenTextures(1, &brick->texture_id);
+        abort_on_GL_error("Could not generate texture object");
 
-    glBindTexture(GL_TEXTURE_3D, *id);
-    abort_on_GL_error("Could not bind 3D texture");
+        glBindTexture(GL_TEXTURE_3D, brick->texture_id);
+        abort_on_GL_error("Could not bind 3D texture");
 
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
 
-    /*glTexImage3D(GL_TEXTURE_3D,
-                 0,
-                 GL_COMPRESSED_RED,
-                 (GLsizei)field->size_x,
-                 (GLsizei)field->size_y,
-                 (GLsizei)field->size_z,
-                 0,
-                 GL_RED,
-                 GL_FLOAT,
-                 (GLvoid*)field->data);*/
-    glTexImage3D(GL_TEXTURE_3D,
-                 0,
-                 GL_COMPRESSED_RED,
-                 (GLsizei)(bricked_field->n_bricks_x*bricked_field->padded_brick_size),
-                 (GLsizei)(bricked_field->n_bricks_y*bricked_field->padded_brick_size),
-                 (GLsizei)(bricked_field->n_bricks_z*bricked_field->padded_brick_size),
-                 0,
-                 GL_RED,
-                 GL_FLOAT,
-                 (GLvoid*)bricked_field->bricks->data);
-    abort_on_GL_error("Could not define 3D texture image");
+        glTexImage3D(GL_TEXTURE_3D,
+                     0,
+                     GL_COMPRESSED_RED,
+                     (GLsizei)brick->padded_size[0],
+                     (GLsizei)brick->padded_size[1],
+                     (GLsizei)brick->padded_size[2],
+                     0,
+                     GL_RED,
+                     GL_FLOAT,
+                     (GLvoid*)brick->data);
+        abort_on_GL_error("Could not define 3D texture image");
 
-    GLint is_compressed;
-    glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_COMPRESSED, &is_compressed);
-    abort_on_GL_error("Could not determine compression state of 3D texture");
-    if (is_compressed == GL_FALSE)
-        print_warning_message("Could not compress 3D texture.");
+        glGenerateMipmap(GL_TEXTURE_3D);
+        abort_on_GL_error("Could not generate mipmap for 3D texture");
 
-    glGenerateMipmap(GL_TEXTURE_3D);
-    abort_on_GL_error("Could not generate mipmap for 3D texture");
+        ListItem item = append_new_list_item(&field_texture->texture->ids, sizeof(GLuint));
+        GLuint* const id = (GLuint*)item.data;
+        *id = brick->texture_id;
+    }
 }
 
 static void clear_field_texture(FieldTexture* field_texture)
