@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define MAX_GLOBAL_VARIABLE_NAME_SIZE 20
+#define MAX_GLOBAL_VARIABLE_NAME_SIZE 30
 
 
 typedef struct Variable
@@ -117,7 +117,9 @@ size_t apply_scalar_field_texture_sampling_in_shader(ShaderSource* source, const
 
     Variable* const variable = create_variable(source);
 
-    set_string(&variable->expression, "    float variable_%d = texture(%s, %s).r;\n", variable->number, texture_name, texture_coordinates_name);
+    set_string(&variable->expression,
+               "    float variable_%d = texture(%s, %s).r;\n",
+               variable->number, texture_name, texture_coordinates_name);
 
     add_global_dependency(variable, texture_name);
     add_global_dependency(variable, texture_coordinates_name);
@@ -128,6 +130,15 @@ size_t apply_scalar_field_texture_sampling_in_shader(ShaderSource* source, const
 void add_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name)
 {
     add_sampler1D_uniform(source, transfer_function_name);
+
+    DynamicString value_scale_name = create_string("%s_value_scale", transfer_function_name);
+    DynamicString value_offset_name = create_string("%s_value_offset", transfer_function_name);
+
+    add_uniform_in_shader(source, "float", value_scale_name.chars);
+    add_uniform_in_shader(source, "float", value_offset_name.chars);
+
+    clear_string(&value_scale_name);
+    clear_string(&value_offset_name);
 }
 
 size_t apply_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name, size_t input_variable_number)
@@ -138,15 +149,33 @@ size_t apply_transfer_function_in_shader(ShaderSource* source, const char* trans
 
     Variable* const variable = create_variable(source);
 
-    set_string(&variable->expression, "    vec4 variable_%d = texture(%s, variable_%d);\n", variable->number, transfer_function_name, input_variable_number);
+    DynamicString value_scale_name = create_string("%s_value_scale", transfer_function_name);
+    DynamicString value_offset_name = create_string("%s_value_offset", transfer_function_name);
+
+    const char* sampling_correction_name = "sampling_correction";
+
+    set_string(&variable->expression,
+               "    float rescaled_variable_%d = variable_%d*%s + %s;\n"
+               "    vec4 variable_%d = texture(%s, rescaled_variable_%d);\n"
+               "    variable_%d.a = 1.0 - pow(1.0 - variable_%d.a, %s);\n",
+               input_variable_number, input_variable_number, value_scale_name.chars, value_offset_name.chars,
+               variable->number, transfer_function_name, input_variable_number,
+               variable->number, variable->number, sampling_correction_name);
 
     add_global_dependency(variable, transfer_function_name);
+    add_global_dependency(variable, sampling_correction_name);
+    add_global_dependency(variable, value_scale_name.chars);
+    add_global_dependency(variable, value_offset_name.chars);
     add_variable_dependency(variable, input_variable_number);
+
+    clear_string(&value_scale_name);
+    clear_string(&value_offset_name);
 
     return variable->number;
 }
 
-size_t add_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet, LinkedList* global_dependencies, LinkedList* variable_dependencies)
+size_t add_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet,
+                             LinkedList* global_dependencies, LinkedList* variable_dependencies)
 {
     check(source);
     check(output_type);
