@@ -12,13 +12,15 @@ typedef struct Field
     size_t size_x;
     size_t size_y;
     size_t size_z;
-    float extent_x;
-    float extent_y;
-    float extent_z;
+    float halfwidth;
+    float halfheight;
+    float halfdepth;
+    float voxel_width;
+    float voxel_height;
+    float voxel_depth;
+    float physical_extent_scale;
     float min_value;
     float max_value;
-    float lower_clip_value;
-    float upper_clip_value;
 } Field;
 
 void initialize_fields(void);
@@ -29,10 +31,5 @@ Field* get_field(const char* name);
 
 void destroy_field(const char* name);
 void cleanup_fields(void);
-
-void clip_field_values(const char* name, float lower_clip_value, float upper_clip_value);
-
-float field_value_to_normalized_value(const char* name, float field_value);
-float normalized_value_to_field_value(const char* name, float normalized_value);
 
 #endif

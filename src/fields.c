@@ -5,14 +5,16 @@
 #include "hash_map.h"
 
 #include <stdlib.h>
+#include <math.h>
 #include <float.h>
 
 
 static Field* create_field(const char* name,
                            enum field_type type, float* data,
                            size_t size_x, size_t size_y, size_t size_z,
-                           float extent_x, float extent_y, float extent_z);
+                           float physical_extent_x, float physical_extent_y, float physical_extent_z);
 static size_t get_field_array_length(const Field* field);
+static void swap_x_and_z_axes(const float* input_array, size_t size_x, size_t size_y, size_t size_z, float* output_array);
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value);
 static void scale_float_array(float* array, size_t length, float zero_value, float unity_value);
 static void clear_field(Field* field);
@@ -90,11 +92,13 @@ Field* create_field_from_bifrost_file(const char* name, const char* data_filenam
 
     float* data = (float*)read_binary_file(data_filename, length, sizeof(float));
 
-    const float extent_x = (size_x - 1)*dx;
-    const float extent_y = (size_y - 1)*dy;
-    const float extent_z = (size_z - 1)*dz;
+    const float physical_extent_x = (size_x - 1)*dx;
+    const float physical_extent_y = (size_y - 1)*dy;
+    const float physical_extent_z = (size_z - 1)*dz;
 
-    return create_field(name, SCALAR_FIELD, data, size_x, size_y, size_z, extent_x, extent_y, extent_z);
+    return create_field(name, SCALAR_FIELD, data,
+                        size_x, size_y, size_z,
+                        physical_extent_x, physical_extent_y, physical_extent_z);
 }
 
 Field* get_field(const char* name)
@@ -127,41 +131,10 @@ void cleanup_fields(void)
     destroy_map(&fields);
 }
 
-void clip_field_values(const char* name, float lower_clip_value, float upper_clip_value)
-{
-    check(upper_clip_value > lower_clip_value);
-
-    Field* const field = get_field(name);
-    check(field->data);
-
-    const float scale = 1.0f/(field->upper_clip_value - field->lower_clip_value);
-    const float new_zero_value = (lower_clip_value - field->lower_clip_value)*scale;
-    const float new_unity_value = (upper_clip_value - field->lower_clip_value)*scale;
-
-    scale_float_array(field->data, get_field_array_length(field), new_zero_value, new_unity_value);
-
-    field->lower_clip_value = lower_clip_value;
-    field->upper_clip_value = upper_clip_value;
-}
-
-float field_value_to_normalized_value(const char* name, float field_value)
-{
-    Field* const field = get_field(name);
-    check(field->upper_clip_value > field->lower_clip_value);
-    return (field_value - field->lower_clip_value)/(field->upper_clip_value - field->lower_clip_value);
-}
-
-float normalized_value_to_field_value(const char* name, float normalized_value)
-{
-    Field* const field = get_field(name);
-    check(field->upper_clip_value > field->lower_clip_value);
-    return field->lower_clip_value + normalized_value*(field->upper_clip_value - field->lower_clip_value);
-}
-
 static Field* create_field(const char* name,
                            enum field_type type, float* data,
                            size_t size_x, size_t size_y, size_t size_z,
-                           float extent_x, float extent_y, float extent_z)
+                           float physical_extent_x, float physical_extent_y, float physical_extent_z)
 {
     check(name);
     check(data);
@@ -174,9 +147,19 @@ static Field* create_field(const char* name,
     field->size_x = size_x;
     field->size_y = size_y;
     field->size_z = size_z;
-    field->extent_x = extent_x;
-    field->extent_y = extent_y;
-    field->extent_z = extent_z;
+
+    const float max_physical_extent = fmaxf(physical_extent_x, fmaxf(physical_extent_y, physical_extent_z));
+    const float spatial_normalization = 1.0f/max_physical_extent;
+
+    field->halfwidth = spatial_normalization*physical_extent_x;
+    field->halfheight = spatial_normalization*physical_extent_y;
+    field->halfdepth = spatial_normalization*physical_extent_z;
+
+    field->voxel_width = 2*field->halfwidth/size_x;
+    field->voxel_height = 2*field->halfheight/size_y;
+    field->voxel_depth = 2*field->halfdepth/size_z;
+
+    field->physical_extent_scale = 0.5f*max_physical_extent;
 
     const size_t length = get_field_array_length(field);
 
@@ -184,15 +167,32 @@ static Field* create_field(const char* name,
 
     scale_float_array(data, length, field->min_value, field->max_value);
 
-    field->lower_clip_value = field->min_value;
-    field->upper_clip_value = field->max_value;
-
     return field;
 }
 
 static size_t get_field_array_length(const Field* field)
 {
     return field->size_x*field->size_y*field->size_z*((field->type == VECTOR_FIELD) ? 3 : 1);
+}
+
+static void swap_x_and_z_axes(const float* input_array, size_t size_x, size_t size_y, size_t size_z, float* output_array)
+{
+    assert(input_array);
+    assert(output_array);
+    assert(output_array != input_array);
+
+    size_t i, j, k;
+    size_t input_idx, output_idx;
+
+    for (i = 0; i < size_x; i++)
+        for (j = 0; j < size_y; j++)
+            for (k = 0; k < size_z; k++)
+            {
+                input_idx = (i*size_y + j)*size_z + k;
+                output_idx = (k*size_y + j)*size_x + i;
+
+                output_array[output_idx] = input_array[input_idx];
+            }
 }
 
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value)
@@ -250,11 +250,13 @@ static void clear_field(Field* field)
     field->size_x = 0;
     field->size_y = 0;
     field->size_z = 0;
-    field->extent_x = 0;
-    field->extent_y = 0;
-    field->extent_z = 0;
+    field->halfwidth = 0;
+    field->halfheight = 0;
+    field->halfdepth = 0;
+    field->voxel_width = 0;
+    field->voxel_height = 0;
+    field->voxel_depth = 0;
+    field->physical_extent_scale = 0;
     field->min_value = 0;
     field->max_value = 0;
-    field->lower_clip_value = 0;
-    field->upper_clip_value = 0;
 }
