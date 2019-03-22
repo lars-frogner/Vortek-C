@@ -3,24 +3,39 @@
 
 #include "shaders.h"
 
+#define TF_START_NODE 1
+#define TF_END_NODE 254
+
+void set_active_shader_program_for_transfer_functions(ShaderProgram* shader_program);
+
 enum transfer_function_component {TF_RED = 0, TF_GREEN = 1, TF_BLUE = 2, TF_ALPHA = 3};
 
 void initialize_transfer_functions(void);
 
+const char* create_transfer_function(void);
+
+void load_transfer_functions(void);
+void sync_transfer_functions(void);
+
 void print_transfer_function(const char* name, enum transfer_function_component component);
 
-const char* create_transfer_function(ShaderProgram* shader_program);
-
-void add_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
-                                                 float texture_coordinate, float value);
+void set_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
+                                                 unsigned int node, float value);
 void remove_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
-                                                    float texture_coordinate);
+                                                    unsigned int node);
 
 void set_logarithmic_transfer_function(const char* name, enum transfer_function_component component,
-                                       float start_texture_coordinate, float end_texture_coordinate,
                                        float start_value, float end_value);
 
-void sync_transfer_functions(void);
+void set_transfer_function_lower_limit(const char* name, float lower_value);
+void set_transfer_function_upper_limit(const char* name, float upper_value);
+
+void set_transfer_function_lower_node(const char* name, enum transfer_function_component component, float value);
+void set_transfer_function_upper_node(const char* name, enum transfer_function_component component, float value);
+
+unsigned int texture_coordinate_to_transfer_function_node(float texture_coordinate);
+unsigned int texture_coordinate_to_lower_transfer_function_node(float texture_coordinate);
+float transfer_function_node_to_texture_coordinate(unsigned int node);
 
 void remove_transfer_function(const char* name);
 void cleanup_transfer_functions(void);
