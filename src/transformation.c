@@ -5,19 +5,13 @@
 #include "dynamic_string.h"
 
 
-typedef struct Uniform
-{
-    GLint location;
-    DynamicString name;
-    int needs_update;
-} Uniform;
-
 typedef struct ProjectionTransformation
 {
-    float vertical_field_of_view;
+    float field_of_view;
     float aspect_ratio;
     float near_plane_distance;
     float far_plane_distance;
+    enum projection_type type;
     Matrix4f matrix;
     int needs_update;
 } ProjectionTransformation;
@@ -27,22 +21,36 @@ typedef struct Transformation
     Matrix4f model_matrix;
     Matrix4f view_matrix;
     ProjectionTransformation projection;
+    Matrix4f modelview_matrix;
+    Matrix4f viewprojection_matrix;
+    Matrix4f MVP_matrix;
     Uniform uniform;
 } Transformation;
 
-typedef struct LookAxis
+typedef struct Camera
 {
-    Vector3f axis;
-    Uniform uniform;
-} LookAxis;
+    Vector3f look_axis;
+    Vector3f position;
+    Uniform look_axis_uniform;
+    int needs_update;
+} Camera;
 
 
-static void update_perspective_projection_matrix(void);
+static void generate_shader_code_for_transformation(void);
+static void update_projection_matrix(void);
+static void sync_transformation(void);
 
 
 static Transformation transformation;
-static LookAxis look_axis;
+static Camera camera;
 
+static ShaderProgram* active_shader_program = NULL;
+
+
+void set_active_shader_program_for_transformation(ShaderProgram* shader_program)
+{
+    active_shader_program = shader_program;
+}
 
 void initialize_transformation(void)
 {
@@ -50,51 +58,38 @@ void initialize_transformation(void)
     transformation.view_matrix = IDENTITY_MATRIX4F;
     transformation.projection.matrix = IDENTITY_MATRIX4F;
 
-    transformation.projection.vertical_field_of_view = 60.0f;
+    transformation.projection.field_of_view = 60.0f;
     transformation.projection.aspect_ratio = 1.0f;
     transformation.projection.near_plane_distance = 0.1f;;
     transformation.projection.far_plane_distance = 100.0f;
     transformation.projection.needs_update = 0;
+    transformation.projection.type = PERSPECTIVE_PROJECTION;
 
-    transformation.uniform.name = create_string("MVP_matrix");
-    transformation.uniform.location = -1;
-    transformation.uniform.needs_update = 0;
+    initialize_uniform(&transformation.uniform, "MVP_matrix");
+    initialize_uniform(&camera.look_axis_uniform, "look_axis");
 
-    look_axis.uniform.name = create_string("look_axis");
-    look_axis.uniform.location = -1;
-    look_axis.uniform.needs_update = 1;
+    generate_shader_code_for_transformation();
 }
 
-void generate_shader_code_for_transformation(ShaderProgram* shader_program)
+void load_transformation(void)
 {
-    check(shader_program);
-    add_uniform_in_shader(&shader_program->vertex_shader_source, "mat4", transformation.uniform.name.chars);
-    add_uniform_in_shader(&shader_program->vertex_shader_source, "vec3", look_axis.uniform.name.chars);
-}
+    check(active_shader_program);
 
-void load_transformation(const ShaderProgram* shader_program)
-{
-    check(shader_program);
+    load_uniform(active_shader_program, &transformation.uniform);
+    load_uniform(active_shader_program, &camera.look_axis_uniform);
 
-    transformation.uniform.location = glGetUniformLocation(shader_program->id, transformation.uniform.name.chars);
-    abort_on_GL_error("Could not get transform matrix uniform location");
+    transformation.uniform.needs_update = 1;
+    camera.needs_update = 1;
 
-    if (transformation.uniform.location == -1)
-        print_warning_message("Uniform \"%s\" not used in shader program.", transformation.uniform.name.chars);
-
-    look_axis.uniform.location = glGetUniformLocation(shader_program->id, look_axis.uniform.name.chars);
-    abort_on_GL_error("Could not get look axis uniform location");
-
-    if (look_axis.uniform.location == -1)
-        print_warning_message("Uniform \"%s\" not used in shader program.", look_axis.uniform.name.chars);
-
-    sync_transformation(shader_program);
+    sync_transformation();
 }
 
 void set_view_distance(float view_distance)
 {
     set_transform_translation(&transformation.view_matrix, 0, 0, -view_distance);
     transformation.uniform.needs_update = 1;
+    camera.needs_update = 1;
+    sync_transformation();
 }
 
 void apply_model_scaling(float scale)
@@ -102,12 +97,14 @@ void apply_model_scaling(float scale)
     assert(scale > 0);
     apply_scaling(&transformation.model_matrix, scale, scale, scale);
     transformation.uniform.needs_update = 1;
+    sync_transformation();
 }
 
 void apply_model_translation(float dx, float dy, float dz)
 {
     apply_translation(&transformation.model_matrix, dx, dy, dz);
     transformation.uniform.needs_update = 1;
+    sync_transformation();
 }
 
 void apply_view_rotation_about_axis(const Vector3f* axis, float angle)
@@ -115,7 +112,8 @@ void apply_view_rotation_about_axis(const Vector3f* axis, float angle)
     assert(axis);
     apply_rotation_about_axis(&transformation.view_matrix, axis, angle);
     transformation.uniform.needs_update = 1;
-    look_axis.uniform.needs_update = 1;
+    camera.needs_update = 1;
+    sync_transformation();
 }
 
 void apply_origin_centered_view_rotation_about_axis(const Vector3f* axis, float angle)
@@ -123,86 +121,67 @@ void apply_origin_centered_view_rotation_about_axis(const Vector3f* axis, float 
     assert(axis);
 
     Vector3f view_translation;
-    get_matrix4f_w_basis_vector(&transformation.view_matrix, &view_translation);
+    get_matrix4f_fourth_column_vector3f(&transformation.view_matrix, &view_translation);
 
     set_transform_translation(&transformation.view_matrix, 0, 0, 0);
     apply_rotation_about_axis(&transformation.view_matrix, axis, angle);
     set_transform_translation(&transformation.view_matrix, view_translation.a[0], view_translation.a[1], view_translation.a[2]);
 
     transformation.uniform.needs_update = 1;
-    look_axis.uniform.needs_update = 1;
+    camera.needs_update = 1;
+    sync_transformation();
 }
 
-void update_camera_properties(float vertical_field_of_view,
+void update_camera_properties(float field_of_view,
                               float aspect_ratio,
                               float near_plane_distance,
-                              float far_plane_distance)
+                              float far_plane_distance,
+                              enum projection_type type)
 {
-    transformation.projection.vertical_field_of_view = vertical_field_of_view;
+    transformation.projection.field_of_view = field_of_view;
     transformation.projection.aspect_ratio = aspect_ratio;
     transformation.projection.near_plane_distance = near_plane_distance;
     transformation.projection.far_plane_distance = far_plane_distance;
-    update_perspective_projection_matrix();
+    transformation.projection.type = type;
+    update_projection_matrix();
 }
 
-void update_camera_vertical_field_of_view(float vertical_field_of_view)
+void update_camera_field_of_view(float field_of_view)
 {
-    transformation.projection.vertical_field_of_view = vertical_field_of_view;
-    update_perspective_projection_matrix();
+    transformation.projection.field_of_view = field_of_view;
+    update_projection_matrix();
 }
 
 void update_camera_aspect_ratio(float aspect_ratio)
 {
     transformation.projection.aspect_ratio = aspect_ratio;
-    update_perspective_projection_matrix();
+    update_projection_matrix();
 }
 
 void update_camera_clip_plane_distances(float near_plane_distance, float far_plane_distance)
 {
     transformation.projection.near_plane_distance = near_plane_distance;
     transformation.projection.far_plane_distance = far_plane_distance;
-    update_perspective_projection_matrix();
+    update_projection_matrix();
 }
 
-void sync_transformation(const ShaderProgram* shader_program)
+void update_camera_projection_type(enum projection_type type)
 {
-    assert(shader_program);
-
-    if (transformation.uniform.needs_update && transformation.uniform.location != -1)
-    {
-        const Matrix4f model_view_projection_matrix = get_model_view_projection_transform_matrix();
-
-        glUseProgram(shader_program->id);
-        abort_on_GL_error("Could not use shader program for updating transform matrix uniform");
-        glUniformMatrix4fv(transformation.uniform.location, 1, GL_TRUE, model_view_projection_matrix.a);
-        abort_on_GL_error("Could not update transform matrix uniform");
-        glUseProgram(0);
-
-        transformation.uniform.needs_update = 0;
-    }
-
-    if (look_axis.uniform.needs_update && look_axis.uniform.location != -1)
-    {
-        Matrix4f inverse_view_matrix = transformation.view_matrix;
-        //invert_matrix4f(&inverse_view_matrix);
-        invert_matrix4f_3x3_submatrix(&inverse_view_matrix);
-        get_matrix4f_z_basis_vector(&inverse_view_matrix, &look_axis.axis);
-        normalize_vector3f(&look_axis.axis);
-
-        glUseProgram(shader_program->id);
-        abort_on_GL_error("Could not use shader program for updating look axis uniform");
-        glUniform3f(look_axis.uniform.location, look_axis.axis.a[0], look_axis.axis.a[1], look_axis.axis.a[2]);
-        abort_on_GL_error("Could not update look axis uniform");
-        glUseProgram(0);
-
-        look_axis.uniform.needs_update = 0;
-    }
+    transformation.projection.type = type;
+    update_projection_matrix();
 }
 
 void cleanup_transformation(void)
 {
-    clear_string(&transformation.uniform.name);
-    clear_string(&look_axis.uniform.name);
+    destroy_uniform(&transformation.uniform);
+    destroy_uniform(&camera.look_axis_uniform);
+}
+
+static void generate_shader_code_for_transformation(void)
+{
+    check(active_shader_program);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "mat4", transformation.uniform.name.chars);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", camera.look_axis_uniform.name.chars);
 }
 
 const char* get_transformation_name(void)
@@ -210,47 +189,120 @@ const char* get_transformation_name(void)
     return transformation.uniform.name.chars;
 }
 
-const char* get_look_axis_name(void)
+const char* get_camera_look_axis_name(void)
 {
-    return look_axis.uniform.name.chars;
+    return camera.look_axis_uniform.name.chars;
 }
 
-Matrix4f get_view_transform_matrix(void)
+const Matrix4f* get_view_transform_matrix(void)
 {
-    return transformation.view_matrix;
+    return &transformation.view_matrix;
 }
 
-Matrix4f get_model_transform_matrix(void)
+const Matrix4f* get_model_transform_matrix(void)
 {
-    return transformation.model_matrix;
+    return &transformation.model_matrix;
 }
 
-Matrix4f get_projection_transform_matrix(void)
+const Matrix4f* get_projection_transform_matrix(void)
 {
-    return transformation.projection.matrix;
+    return &transformation.projection.matrix;
 }
 
-Matrix4f get_modelview_transform_matrix(void)
+const Matrix4f* get_modelview_transform_matrix(void)
 {
-    return matmul4f(&transformation.view_matrix, &transformation.model_matrix);
+    return &transformation.modelview_matrix;
 }
 
-Matrix4f get_model_view_projection_transform_matrix(void)
+const Matrix4f* get_viewprojection_transform_matrix(void)
 {
-    const Matrix4f modelview_matrix = get_modelview_transform_matrix();
-    return matmul4f(&transformation.projection.matrix, &modelview_matrix);
+    return &transformation.viewprojection_matrix;
 }
 
-Vector3f get_look_axis(void)
+const Matrix4f* get_model_view_projection_transform_matrix(void)
 {
-    return look_axis.axis;
+    return &transformation.MVP_matrix;
 }
 
-static void update_perspective_projection_matrix(void)
+const Vector3f* get_camera_look_axis(void)
 {
-    transformation.projection.matrix = create_perspective_transform(transformation.projection.vertical_field_of_view,
-                                                                    transformation.projection.aspect_ratio,
-                                                                    transformation.projection.near_plane_distance,
-                                                                    transformation.projection.far_plane_distance);
+    return &camera.look_axis;
+}
+
+const Vector3f* get_camera_position(void)
+{
+    return &camera.position;
+}
+
+float get_model_scale(unsigned int axis)
+{
+    assert(axis < 3);
+    return transformation.model_matrix.a[5*axis];
+}
+
+float get_component_of_vector_from_model_point_to_camera(const Vector3f* point, unsigned int component)
+{
+    assert(point);
+    assert(component < 3);
+    return (transformation.projection.type == PERSPECTIVE_PROJECTION) ?
+        camera.position.a[component] - point->a[component]*get_model_scale(component) : camera.look_axis.a[component];
+}
+
+static void update_projection_matrix(void)
+{
+    if (transformation.projection.type == PERSPECTIVE_PROJECTION)
+    {
+        transformation.projection.matrix = create_perspective_transform(transformation.projection.field_of_view,
+                                                                        transformation.projection.aspect_ratio,
+                                                                        transformation.projection.near_plane_distance,
+                                                                        transformation.projection.far_plane_distance);
+    }
+    else
+    {
+        transformation.projection.matrix = create_orthographic_transform(transformation.projection.field_of_view,
+                                                                         transformation.projection.aspect_ratio,
+                                                                         transformation.projection.near_plane_distance,
+                                                                         transformation.projection.far_plane_distance);
+    }
+
     transformation.uniform.needs_update = 1;
+    sync_transformation();
+}
+
+static void sync_transformation(void)
+{
+    check(active_shader_program);
+
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program for updating transformation uniforms");
+
+    if (transformation.uniform.needs_update)
+    {
+        transformation.modelview_matrix = multiply_matrix4f(&transformation.view_matrix, &transformation.model_matrix);
+        transformation.MVP_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.modelview_matrix);
+        transformation.viewprojection_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.view_matrix);
+
+        glUniformMatrix4fv(transformation.uniform.location, 1, GL_TRUE, transformation.MVP_matrix.a);
+        abort_on_GL_error("Could not update transform matrix uniform");
+
+        transformation.uniform.needs_update = 0;
+    }
+
+    if (camera.needs_update)
+    {
+        const Matrix4f* view_matrix = &transformation.view_matrix;
+
+        Matrix4f inverse_view_matrix = *view_matrix;
+        invert_matrix4f(&inverse_view_matrix);
+        get_matrix4f_third_column_vector3f(&inverse_view_matrix, &camera.look_axis);
+        normalize_vector3f(&camera.look_axis);
+        get_matrix4f_fourth_column_vector3f(&inverse_view_matrix, &camera.position);
+
+        glUniform3f(camera.look_axis_uniform.location, camera.look_axis.a[0], camera.look_axis.a[1], camera.look_axis.a[2]);
+        abort_on_GL_error("Could not update look axis uniform");
+
+        camera.needs_update = 0;
+    }
+
+    glUseProgram(0);
 }
