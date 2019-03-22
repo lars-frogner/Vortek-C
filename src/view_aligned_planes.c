@@ -1,3 +1,11 @@
+/*
+ * The slicing of view aligned planes through a box is implemented in a vertex
+ * shader, based on Salama and Kolb (2005) "A Vertex Program for Efficient
+ * Box-Plane Intersection". This allows for a large number of small boxes
+ * to be sliced per frame (see bricks.c) since very little data has to be
+ * sent to the GPU for each box.
+ */
+
 #include "view_aligned_planes.h"
 
 #include "gl_includes.h"
@@ -84,9 +92,11 @@ static void update_vertex_array_object(void);
 
 static void generate_shader_code_for_planes(void);
 
-static void draw_brick_tree_node(BrickTreeNode* node);
+static void draw_brick_tree_nodes(const BrickTreeNode* node);
 static void draw_brick(const Brick* brick);
-static void draw_plane_faces(const Brick* brick, unsigned int n_planes);
+static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node);
+static void draw_sub_brick(const SubBrickTreeNode* node);
+static void draw_plane_faces(unsigned int n_planes);
 
 static void sync_planes(void);
 
@@ -94,8 +104,6 @@ static void cleanup_plane_stack(void);
 static void destroy_vertex_array_object(void);
 static void clear_plane_stack(void);
 static void reset_plane_stack_attributes(void);
-
-//static void compute_vertex_positions(unsigned int n_required_planes, float back_plane_dist, unsigned int back_corner_idx, const Vector3f* brick_offset);
 
 
 static PlaneStack plane_stack;
@@ -153,6 +161,8 @@ static const GLuint orientation_permutations[9] = {0, 1, 2,  // Cycle 0
 static Uniform brick_offset_uniform;
 static Uniform brick_extent_uniform;
 static Uniform pad_fractions_uniform;
+static Uniform subbrick_offset_uniform;
+static Uniform subbrick_extent_uniform;
 
 static Uniform back_plane_dist_uniform;
 static Uniform back_corner_idx_uniform;
@@ -160,6 +170,8 @@ static Uniform back_corner_idx_uniform;
 static Uniform orientation_uniform;
 
 static Uniform sampling_correction_uniform;
+
+static float visibility_threshold = 0.0f;
 
 static ActiveBrickedField active_bricked_field = {NULL, NULL, NULL, 0, 0};
 
@@ -189,6 +201,8 @@ void initialize_planes(void)
     initialize_uniform(&brick_offset_uniform, "brick_offset");
     initialize_uniform(&brick_extent_uniform, "brick_extent");
     initialize_uniform(&pad_fractions_uniform, "pad_fractions");
+    initialize_uniform(&subbrick_offset_uniform, "subbrick_offset");
+    initialize_uniform(&subbrick_extent_uniform, "subbrick_extent");
 
     initialize_uniform(&back_plane_dist_uniform, "back_plane_dist");
     initialize_uniform(&back_corner_idx_uniform, "back_corner_idx");
@@ -215,6 +229,8 @@ void load_planes(void)
     load_uniform(active_shader_program, &brick_offset_uniform);
     load_uniform(active_shader_program, &brick_extent_uniform);
     load_uniform(active_shader_program, &pad_fractions_uniform);
+    load_uniform(active_shader_program, &subbrick_offset_uniform);
+    load_uniform(active_shader_program, &subbrick_extent_uniform);
 
     load_uniform(active_shader_program, &back_plane_dist_uniform);
     load_uniform(active_shader_program, &back_corner_idx_uniform);
@@ -250,6 +266,12 @@ void set_active_bricked_field(const BrickedField* bricked_field)
     pad_fractions_uniform.needs_update = 1;
 
     sync_planes();
+}
+
+void set_visibility_threshold(float threshold)
+{
+    check(threshold >= 0.0f && threshold <= 1.0f);
+    visibility_threshold = threshold;
 }
 
 void set_plane_separation(float spacing_multiplier)
@@ -322,14 +344,22 @@ void draw_active_bricked_field()
 
     active_bricked_field.current_front_corner_idx = opposite_corners[active_bricked_field.current_back_corner_idx];
 
-    BrickTreeNode* node = bricked_field->tree;//->upper_child->upper_child->upper_child->lower_child->lower_child;
+    BrickTreeNode* node = bricked_field->tree;
 
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program");
 
     glUniform1ui(back_corner_idx_uniform.location, (GLuint)active_bricked_field.current_back_corner_idx);
 
-    draw_brick_tree_node(node);
+    glBindVertexArray(plane_stack.vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing");
+
+    glActiveTexture(GL_TEXTURE0);
+    abort_on_GL_error("Could not set active texture unit");
+
+    draw_brick_tree_nodes(node);
+
+    glBindVertexArray(0);
 
     glUseProgram(0);
 
@@ -352,6 +382,8 @@ void cleanup_planes(void)
     destroy_uniform(&brick_offset_uniform);
     destroy_uniform(&brick_extent_uniform);
     destroy_uniform(&pad_fractions_uniform);
+    destroy_uniform(&subbrick_offset_uniform);
+    destroy_uniform(&subbrick_extent_uniform);
 
     destroy_uniform(&back_plane_dist_uniform);
     destroy_uniform(&back_corner_idx_uniform);
@@ -516,6 +548,8 @@ static void generate_shader_code_for_planes(void)
     const char* brick_offset_name = brick_offset_uniform.name.chars;
     const char* brick_extent_name = brick_extent_uniform.name.chars;
     const char* pad_fractions_name = pad_fractions_uniform.name.chars;
+    const char* subbrick_offset_name = subbrick_offset_uniform.name.chars;
+    const char* subbrick_extent_name = subbrick_extent_uniform.name.chars;
 
     const char* back_plane_dist_name = back_plane_dist_uniform.name.chars;
     const char* back_corner_idx_name = back_corner_idx_uniform.name.chars;
@@ -538,6 +572,8 @@ static void generate_shader_code_for_planes(void)
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", brick_offset_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", brick_extent_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", pad_fractions_name);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", subbrick_offset_name);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", subbrick_extent_name);
 
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "float", back_plane_dist_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "uint", back_corner_idx_name);
@@ -554,10 +590,10 @@ static void generate_shader_code_for_planes(void)
     "\n        uint edge_start_idx = edge_starts[4*vertex_idx + edge_idx];"
     "\n        uint edge_end_idx   =   edge_ends[4*vertex_idx + edge_idx];"
     "\n"
-    "\n        vec3 edge_start = brick_extent*corners[corner_permutations[8*back_corner_idx + edge_start_idx]];"
-    "\n        vec3 edge_end   = brick_extent*corners[corner_permutations[8*back_corner_idx + edge_end_idx]];"
+    "\n        vec3 edge_start = subbrick_extent*corners[corner_permutations[8*back_corner_idx + edge_start_idx]];"
+    "\n        vec3 edge_end   = subbrick_extent*corners[corner_permutations[8*back_corner_idx + edge_end_idx]];"
     "\n"
-    "\n        vec3 edge_origin = edge_start + brick_offset;"
+    "\n        vec3 edge_origin = edge_start + subbrick_offset;"
     "\n        vec3 edge_vector = edge_end - edge_start;"
     "\n"
     "\n        float denom = dot(edge_vector, look_axis);"
@@ -580,8 +616,8 @@ static void generate_shader_code_for_planes(void)
     append_string_to_list(&global_dependencies, corner_permutations_name);
     append_string_to_list(&global_dependencies, edge_starts_name);
     append_string_to_list(&global_dependencies, edge_ends_name);
-    append_string_to_list(&global_dependencies, brick_offset_name);
-    append_string_to_list(&global_dependencies, brick_extent_name);
+    append_string_to_list(&global_dependencies, subbrick_offset_name);
+    append_string_to_list(&global_dependencies, subbrick_extent_name);
     append_string_to_list(&global_dependencies, back_plane_dist_name);
     append_string_to_list(&global_dependencies, back_corner_idx_name);
     append_string_to_list(&global_dependencies, get_camera_look_axis_name());
@@ -599,16 +635,18 @@ static void generate_shader_code_for_planes(void)
 
     DynamicString tex_coord_code = create_string(
     "\n    vec3 tex_coord;"
-    "\n    vec3 local_position = (variable_%d.xyz - brick_offset)/brick_extent;"
+    "\n    vec3 position_within_brick = (variable_%d.xyz - brick_offset)/brick_extent;"
     "\n    vec3 scale = vec3(1.0) - 2.0*pad_fractions;"
     "\n    for (uint component = 0; component < 3; component++)"
     "\n    {"
     "\n        uint permuted_component = orientation_permutations[3*orientation + component];"
-    "\n        tex_coord[component] = scale[permuted_component]*local_position[permuted_component] + pad_fractions[permuted_component];"
+    "\n        tex_coord[component] = scale[permuted_component]*position_within_brick[permuted_component] + pad_fractions[permuted_component];"
     "\n    }",
     position_variable_number);
 
     global_dependencies = create_list();
+    append_string_to_list(&global_dependencies, brick_offset_name);
+    append_string_to_list(&global_dependencies, brick_extent_name);
     append_string_to_list(&global_dependencies, pad_fractions_name);
     append_string_to_list(&global_dependencies, orientation_permutations_name);
     append_string_to_list(&global_dependencies, orientation_name);
@@ -631,9 +669,13 @@ static void generate_shader_code_for_planes(void)
     add_uniform_in_shader(&active_shader_program->fragment_shader_source, "float", sampling_correction_name);
 }
 
-static void draw_brick_tree_node(BrickTreeNode* node)
+static void draw_brick_tree_nodes(const BrickTreeNode* node)
 {
     assert(node);
+
+    // If the brick is invisible, stop traversal of this branch
+    if (node->visibility_ratio <= visibility_threshold)
+        return;
 
     if (node->brick)
     {
@@ -654,13 +696,13 @@ static void draw_brick_tree_node(BrickTreeNode* node)
 
         if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
         {
-            draw_brick_tree_node(node->lower_child);
-            draw_brick_tree_node(node->upper_child);
+            draw_brick_tree_nodes(node->lower_child);
+            draw_brick_tree_nodes(node->upper_child);
         }
         else
         {
-            draw_brick_tree_node(node->upper_child);
-            draw_brick_tree_node(node->lower_child);
+            draw_brick_tree_nodes(node->upper_child);
+            draw_brick_tree_nodes(node->lower_child);
         }
     }
 }
@@ -668,7 +710,6 @@ static void draw_brick_tree_node(BrickTreeNode* node)
 static void draw_brick(const Brick* brick)
 {
     assert(brick);
-    assert(active_bricked_field.current_look_axis);
 
     // Update brick layout orientation
     glUniform1ui(orientation_uniform.location, (GLuint)brick->orientation);
@@ -691,8 +732,67 @@ static void draw_brick(const Brick* brick)
                 brick->pad_fractions.a[1],
                 brick->pad_fractions.a[2]);
 
+    glBindTexture(GL_TEXTURE_3D, brick->texture_id);
+    abort_on_GL_error("Could not bind 3D texture");
+
+    draw_sub_brick_tree_nodes(brick->tree);
+}
+
+static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
+{
+    assert(node);
+
+    if (node->visibility_ratio <= visibility_threshold)
+    {
+        // If the sub brick is invisible, stop traversal of this branch
+        return;
+    }
+    else
+    {
+        // If the sub brick is not 100 % visible and it has children, traverse these recursively
+        if (node->visibility_ratio < 1.0f && node->lower_child)
+        {
+            assert(node->upper_child);
+
+            // Make sure to draw the children in the correct order (back to front)
+            if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
+            {
+                draw_sub_brick_tree_nodes(node->lower_child);
+                draw_sub_brick_tree_nodes(node->upper_child);
+            }
+            else
+            {
+                draw_sub_brick_tree_nodes(node->upper_child);
+                draw_sub_brick_tree_nodes(node->lower_child);
+            }
+        }
+        else
+        {
+            // If the sub brick has no transparent regions or is a leaf node, draw it
+            draw_sub_brick(node);
+        }
+    }
+}
+
+static void draw_sub_brick(const SubBrickTreeNode* node)
+{
+    assert(node);
+    assert(active_bricked_field.current_look_axis);
+
+    // Update offset to first sub brick corner
+    glUniform3f(subbrick_offset_uniform.location,
+                node->spatial_offset.a[0],
+                node->spatial_offset.a[1],
+                node->spatial_offset.a[2]);
+
+    // Update sub brick extent
+    glUniform3f(subbrick_extent_uniform.location,
+                node->spatial_extent.a[0],
+                node->spatial_extent.a[1],
+                node->spatial_extent.a[2]);
+
     /*
-    Project brick corners onto the look axis and find the one
+    Project sub brick corners onto the look axis and find the one
     giving the smallest (most negative/least positive) value.
     This value gives the initial (signed) distance for the plane
     stack. The corresponding corner is the back corner. The difference
@@ -707,12 +807,12 @@ static void draw_brick(const Brick* brick)
     Back corner
     */
 
-    const float plane_dist_offset = dot3f(&brick->spatial_offset, active_bricked_field.current_look_axis);
+    const float plane_dist_offset = dot3f(&node->spatial_offset, active_bricked_field.current_look_axis);
 
-    const Vector3f scaled_back_corner = multiply_vector3f(corners + active_bricked_field.current_back_corner_idx, &brick->spatial_extent);
+    const Vector3f scaled_back_corner = multiply_vector3f(corners + active_bricked_field.current_back_corner_idx, &node->spatial_extent);
     float back_plane_dist = dot3f(&scaled_back_corner, active_bricked_field.current_look_axis) + plane_dist_offset;
 
-    const Vector3f scaled_front_corner = multiply_vector3f(corners + active_bricked_field.current_front_corner_idx, &brick->spatial_extent);
+    const Vector3f scaled_front_corner = multiply_vector3f(corners + active_bricked_field.current_front_corner_idx, &node->spatial_extent);
     float front_plane_dist = dot3f(&scaled_front_corner, active_bricked_field.current_look_axis) + plane_dist_offset;
 
     // Offset start distance by half a plane spacing so that the first plane gets a non-zero area
@@ -725,29 +825,16 @@ static void draw_brick(const Brick* brick)
     const unsigned int n_required_planes = uimin((unsigned int)((front_plane_dist - back_plane_dist)/plane_separation.value) + 1,
                                                  plane_stack.n_planes);
 
-    //compute_vertex_positions(n_required_planes, back_plane_dist, back_corner_idx, &brick->spatial_offset);
-    draw_plane_faces(brick, n_required_planes);
+    draw_plane_faces(n_required_planes);
 }
 
-static void draw_plane_faces(const Brick* brick, unsigned int n_planes)
+static void draw_plane_faces(unsigned int n_planes)
 {
-    assert(brick);
     assert(n_planes <= plane_stack.n_planes);
     assert(plane_stack.vertex_array_object_id > 0);
 
-    glBindVertexArray(plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO for drawing");
-
-    glActiveTexture(GL_TEXTURE0);
-    abort_on_GL_error("Could not set active texture unit");
-
-    glBindTexture(GL_TEXTURE_3D, brick->texture_id);
-    abort_on_GL_error("Could not bind 3D texture");
-
     glDrawElements(GL_TRIANGLES, (GLsizei)(12*n_planes), GL_UNSIGNED_INT, (GLvoid*)0);
     abort_on_GL_error("Could not draw planes");
-
-    glBindVertexArray(0);
 }
 
 static void sync_planes(void)
@@ -823,72 +910,3 @@ static void reset_plane_stack_attributes(void)
 
     plane_stack.n_planes = 0;
 }
-
-/*static void compute_vertex_positions(unsigned int n_required_planes, float back_plane_dist, unsigned int back_corner_idx, const Vector3f* brick_offset)
-{
-    const Vector3f look_axis = get_camera_look_axis();
-
-    printf("Back corner: %d at %g, look axis: (%g, %g, %g)\n", back_corner_idx, back_plane_dist, look_axis.a[0], look_axis.a[1], look_axis.a[2]);
-
-    unsigned int plane_idx, vertex_idx, edge_idx;
-
-    for (plane_idx = 0; plane_idx < n_required_planes; plane_idx++)
-    {
-        float plane_dist = back_plane_dist + plane_idx*plane_separation.value;
-
-        for (vertex_idx = 0; vertex_idx < 6; vertex_idx++)
-        {
-            for (edge_idx = 0; edge_idx < 4; edge_idx++)
-            {
-                unsigned int edge_start_idx = edge_starts[4*vertex_idx + edge_idx];
-                unsigned int edge_end_idx   =   edge_ends[4*vertex_idx + edge_idx];
-
-                Vector3f edge_start = brick_corners.corners[corner_permutations[8*back_corner_idx + edge_start_idx]];
-                Vector3f edge_end   = brick_corners.corners[corner_permutations[8*back_corner_idx + edge_end_idx]];
-
-                Vector3f edge_origin = add_vector3f(&edge_start, brick_offset);
-                Vector3f edge_vector = subtract_vector3f(&edge_end, &edge_start);
-
-                printf("Plane %d: Vertex %d: Edge (%g, %g, %g) -> (%g, %g, %g)\n", plane_idx, vertex_idx, edge_origin.a[0], edge_origin.a[1], edge_origin.a[2], edge_origin.a[0] + edge_vector.a[0], edge_origin.a[1] + edge_vector.a[1], edge_origin.a[2] + edge_vector.a[2]);
-
-                float denom = dot3f(&edge_vector, &look_axis);
-                float lambda = (denom != 0.0) ? (plane_dist - dot3f(&edge_origin, &look_axis))/denom : -1.0;
-
-                if (lambda >= 0.0 && lambda <= 1.0)
-                {
-                    printf("Intersection: lambda = %g\n", lambda);
-                    plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[0] = edge_origin.a[0] + lambda*edge_vector.a[0];
-                    plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[1] = edge_origin.a[1] + lambda*edge_vector.a[1];
-                    plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[2] = edge_origin.a[2] + lambda*edge_vector.a[2];
-                    break;
-                }
-            }
-        }
-        printf("Plane %d\n", plane_idx);
-        for (vertex_idx = 0; vertex_idx < 6; vertex_idx++)
-            printf("P%d = (%g, %g, %g)\n", vertex_idx, plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[0], plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[1], plane_stack.plane_vertices[plane_idx].vertices[vertex_idx].position.a[2]);
-
-        Vector3f triangle_edge_1 = subtract_vector3f(&plane_stack.plane_vertices[plane_idx].vertices[2].position, &plane_stack.plane_vertices[plane_idx].vertices[0].position);
-        Vector3f triangle_edge_2 = subtract_vector3f(&plane_stack.plane_vertices[plane_idx].vertices[4].position, &plane_stack.plane_vertices[plane_idx].vertices[2].position);
-        Vector3f triangle_normal = cross3f(&triangle_edge_1, &triangle_edge_2);
-        Vector4f triangle_normal_h = extend_vector3f_to_vector4f(&triangle_normal, 1.0f);
-        Matrix4f modelview = get_modelview_transform_matrix();
-        Vector4f transformed_triangle_normal_h = matvecmul4f(&modelview, &triangle_normal_h);
-        Vector3f transformed_triangle_normal = extract_vector3f_from_vector4f(&transformed_triangle_normal_h);
-        normalize_vector3f(&triangle_normal);
-        normalize_vector3f(&transformed_triangle_normal);
-        print_vector3f(&look_axis);
-        print_vector3f(&triangle_normal);
-        print_vector3f(&transformed_triangle_normal);
-    }
-
-    glBindVertexArray(plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
-
-    // Store buffer of all vertices on device
-    glBindBuffer(GL_ARRAY_BUFFER, plane_stack.vertex_buffer_id);
-    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)plane_stack.vertex_buffer_size, (GLvoid*)plane_stack.vertex_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind VBO to VAO");
-
-    glBindVertexArray(0);
-}*/

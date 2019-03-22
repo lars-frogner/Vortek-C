@@ -17,6 +17,8 @@
 #define TF_LOWER_NODE 0
 #define TF_UPPER_NODE 255
 
+#define INVISIBLE_ALPHA 1e-6f
+
 
 enum transfer_function_type {PIECEWISE_LINEAR, LOGARITHMIC};
 
@@ -24,6 +26,11 @@ typedef struct ValueLimits
 {
     float lower_limit;
     float upper_limit;
+    float range_norm;
+    float scale;
+    float offset;
+    size_t lower_visibility;
+    size_t upper_visibility;
     Uniform scale_uniform;
     Uniform offset_uniform;
     int needs_sync;
@@ -47,31 +54,35 @@ typedef struct TransferFunctionTexture
 
 static TransferFunctionTexture* get_transfer_function_texture(const char* name);
 
+static unsigned int interior_texture_coordinate_to_lower_transfer_function_node(float texture_coordinate);
+static float interior_transfer_function_node_to_texture_coordinate(unsigned int node);
+
+static void update_transfer_function_limit_quantities(TransferFunction* transfer_function);
+
+static void update_brick_tree_node_visibility_ratios(const TransferFunction* transfer_function, const Field* field, BrickTreeNode* node);
+static void update_sub_brick_tree_node_visibility_ratios(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node);
+static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node);
+
 static void transfer_transfer_function_texture(TransferFunctionTexture* transfer_function_texture);
 
 static void load_transfer_function(TransferFunctionTexture* transfer_function_texture);
-
 static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture);
 
 static void clear_transfer_function_texture(TransferFunctionTexture* transfer_function_texture);
-
 static void reset_transfer_function_texture_data(TransferFunctionTexture* transfer_function_texture, unsigned int component);
 
 static unsigned int find_closest_node_above(const TransferFunction* transfer_function, unsigned int component, unsigned int node);
-
 static unsigned int find_closest_node_below(const TransferFunction* transfer_function, unsigned int component, unsigned int node);
 
 static void set_piecewise_linear_transfer_function_data(TransferFunction* transfer_function, unsigned int component,
                                                         unsigned int start_node, unsigned int end_node,
                                                         float start_value, float end_value);
-
 static void set_logarithmic_transfer_function_data(TransferFunction* transfer_function, unsigned int component,
                                                    unsigned int start_node, unsigned int end_node,
                                                    float start_value, float end_value);
 
 static void compute_linear_array_segment(float* segment, size_t segment_length, unsigned int stride,
                                          float start_value, float end_value);
-
 static void compute_logarithmic_array_segment(float* segment, size_t segment_length, unsigned int stride,
                                               float start_value, float end_value);
 
@@ -114,6 +125,7 @@ const char* create_transfer_function(void)
 
     transfer_function->limits.lower_limit = 0.0f;
     transfer_function->limits.upper_limit = 1.0f;
+    update_transfer_function_limit_quantities(transfer_function);
 
     transfer_transfer_function_texture(transfer_function_texture);
 
@@ -249,6 +261,7 @@ void set_transfer_function_lower_limit(const char* name, float lower_limit)
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
 
     transfer_function->limits.lower_limit = fminf(transfer_function->limits.upper_limit, fmaxf(0.0f, lower_limit));
+    update_transfer_function_limit_quantities(transfer_function);
 
     transfer_function->limits.needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
@@ -260,6 +273,7 @@ void set_transfer_function_upper_limit(const char* name, float upper_limit)
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
 
     transfer_function->limits.upper_limit = fmaxf(transfer_function->limits.lower_limit, fminf(1.0f, upper_limit));
+    update_transfer_function_limit_quantities(transfer_function);
 
     transfer_function->limits.needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
@@ -272,6 +286,9 @@ void set_transfer_function_lower_node(const char* name, enum transfer_function_c
 
     transfer_function->output[TF_LOWER_NODE][component] = value;
 
+    if (component == TF_ALPHA)
+        transfer_function->limits.lower_visibility = value > INVISIBLE_ALPHA;
+
     transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
@@ -283,18 +300,24 @@ void set_transfer_function_upper_node(const char* name, enum transfer_function_c
 
     transfer_function->output[TF_UPPER_NODE][component] = value;
 
+    if (component == TF_ALPHA)
+        transfer_function->limits.upper_visibility = value > INVISIBLE_ALPHA;
+
     transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
-unsigned int texture_coordinate_to_transfer_function_node(float texture_coordinate)
+void update_visibility_ratios(const char* transfer_function_name, BrickedField* bricked_field)
 {
-    return (unsigned int)(NODE_RANGE_OFFSET + clamp(texture_coordinate, 0, 1)*NODE_RANGE_SIZE + 0.5f);
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_name);
+    TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
+
+    update_brick_tree_node_visibility_ratios(transfer_function, bricked_field->field, bricked_field->tree);
 }
 
-unsigned int texture_coordinate_to_lower_transfer_function_node(float texture_coordinate)
+unsigned int texture_coordinate_to_nearest_transfer_function_node(float texture_coordinate)
 {
-    return (unsigned int)(NODE_RANGE_OFFSET + clamp(texture_coordinate, 0, 1)*NODE_RANGE_SIZE);
+    return (unsigned int)(NODE_RANGE_OFFSET + clamp(texture_coordinate, 0, 1)*NODE_RANGE_SIZE + 0.5f);
 }
 
 float transfer_function_node_to_texture_coordinate(unsigned int node)
@@ -339,6 +362,115 @@ static TransferFunctionTexture* get_transfer_function_texture(const char* name)
     check(transfer_function_texture);
 
     return transfer_function_texture;
+}
+
+static unsigned int interior_texture_coordinate_to_lower_transfer_function_node(float texture_coordinate)
+{
+    return (unsigned int)(NODE_RANGE_OFFSET + texture_coordinate*NODE_RANGE_SIZE);
+}
+
+static float interior_transfer_function_node_to_texture_coordinate(unsigned int node)
+{
+    return ((float)node - NODE_RANGE_OFFSET)*NODE_RANGE_NORM;
+}
+
+static void update_transfer_function_limit_quantities(TransferFunction* transfer_function)
+{
+    assert(transfer_function);
+
+    transfer_function->limits.range_norm = 1.0f/(transfer_function->limits.upper_limit - transfer_function->limits.lower_limit);
+
+    transfer_function->limits.scale  = (1.0f - 2.0f*TEXTURE_COORDINATE_PAD)*transfer_function->limits.range_norm;
+
+    transfer_function->limits.offset = (        TEXTURE_COORDINATE_PAD*transfer_function->limits.upper_limit -
+                                        (1.0f - TEXTURE_COORDINATE_PAD)*transfer_function->limits.lower_limit)*transfer_function->limits.range_norm;
+}
+
+static void update_brick_tree_node_visibility_ratios(const TransferFunction* transfer_function, const Field* field, BrickTreeNode* node)
+{
+    assert(transfer_function);
+    assert(field);
+    assert(node);
+
+    if (node->brick)
+    {
+        update_sub_brick_tree_node_visibility_ratios(transfer_function, field, node->brick->tree);
+        node->visibility_ratio = node->brick->tree->visibility_ratio;
+    }
+    else
+    {
+        assert(node->lower_child);
+        assert(node->upper_child);
+
+        update_brick_tree_node_visibility_ratios(transfer_function, field, node->lower_child);
+        update_brick_tree_node_visibility_ratios(transfer_function, field, node->upper_child);
+
+        node->visibility_ratio = 0.5f*(node->lower_child->visibility_ratio + node->upper_child->visibility_ratio);
+    }
+}
+
+static void update_sub_brick_tree_node_visibility_ratios(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node)
+{
+    assert(transfer_function);
+    assert(field);
+    assert(node);
+
+    if (node->lower_child)
+    {
+        assert(node->upper_child);
+
+        update_sub_brick_tree_node_visibility_ratios(transfer_function, field, node->lower_child);
+        update_sub_brick_tree_node_visibility_ratios(transfer_function, field, node->upper_child);
+
+        node->visibility_ratio = 0.5f*(node->lower_child->visibility_ratio + node->upper_child->visibility_ratio);
+    }
+    else
+    {
+        node->visibility_ratio = compute_sub_brick_visibility_ratio(transfer_function, field, node);
+    }
+}
+
+static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node)
+{
+    assert(transfer_function);
+    assert(field);
+    assert(node);
+
+    const size_t offset = (node->offset_z*field->size_y + node->offset_y)*field->size_x + node->offset_x;
+
+    float field_value;
+    float texture_coordinate;
+    unsigned int node_below;
+    float above_weight;
+    size_t n_visible_voxels = 0;
+
+    size_t i, j, k;
+    for (k = 0; k < node->size_z; k++)
+        for (j = 0; j < node->size_y; j++)
+            for (i = 0; i < node->size_x; i++)
+    {
+        field_value = field->data[offset + (k*field->size_y + j)*field->size_x + i];
+
+        if (field_value <= transfer_function->limits.lower_limit)
+        {
+            n_visible_voxels += transfer_function->limits.lower_visibility;
+        }
+        else if (field_value >= transfer_function->limits.upper_limit)
+        {
+            n_visible_voxels += transfer_function->limits.upper_visibility;
+        }
+        else
+        {
+            texture_coordinate = (field_value - transfer_function->limits.lower_limit)*transfer_function->limits.range_norm;
+            node_below = interior_texture_coordinate_to_lower_transfer_function_node(texture_coordinate);
+            above_weight = (texture_coordinate - interior_transfer_function_node_to_texture_coordinate(node_below))*NODE_RANGE_SIZE;
+
+            n_visible_voxels += ((1.0f - above_weight)*transfer_function->output[node_below][TF_ALPHA] +
+                                         above_weight *transfer_function->output[node_below + 1][TF_ALPHA]) > INVISIBLE_ALPHA;
+        }
+    }
+
+    return (float)n_visible_voxels/(node->size_x*node->size_y*node->size_z);
 }
 
 static void transfer_transfer_function_texture(TransferFunctionTexture* transfer_function_texture)
@@ -417,20 +549,12 @@ static void sync_transfer_function(TransferFunctionTexture* transfer_function_te
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program for updating field texture uniforms");
 
-
     if (transfer_function->limits.needs_sync)
     {
-        const float limit_range_norm = 1.0f/(transfer_function->limits.upper_limit - transfer_function->limits.lower_limit);
-
-        const float scale = (1.0f - 2.0f*TEXTURE_COORDINATE_PAD)*limit_range_norm;
-
-        const float offset = (        TEXTURE_COORDINATE_PAD *transfer_function->limits.upper_limit -
-                              (1.0f - TEXTURE_COORDINATE_PAD)*transfer_function->limits.lower_limit)*limit_range_norm;
-
-        glUniform1f(transfer_function->limits.scale_uniform.location, scale);
+        glUniform1f(transfer_function->limits.scale_uniform.location, transfer_function->limits.scale);
         abort_on_GL_error("Could not update transfer function limit scale uniform");
 
-        glUniform1f(transfer_function->limits.offset_uniform.location, offset);
+        glUniform1f(transfer_function->limits.offset_uniform.location, transfer_function->limits.offset);
         abort_on_GL_error("Could not update transfer function limit offset uniform");
 
         transfer_function->limits.needs_sync = 0;
@@ -472,13 +596,19 @@ static void reset_transfer_function_texture_data(TransferFunctionTexture* transf
     transfer_function->output[TF_LOWER_NODE][component] = 0.0f;
     transfer_function->output[TF_UPPER_NODE][component] = 1.0f;
 
-    const float start_value = (component == 3) ? 1.0f : 0.0f;
+    const float start_value = (component == TF_ALPHA) ? 1.0f : 0.0f;
     const float end_value = 1.0f;
 
     compute_linear_array_segment(transfer_function->output[TF_START_NODE] + component,
                                  TRANSFER_FUNCTION_SIZE - 2,
                                  TRANSFER_FUNCTION_COMPONENTS,
                                  start_value, end_value);
+
+    if (component == TF_ALPHA)
+    {
+        transfer_function->limits.lower_visibility = 1;
+        transfer_function->limits.upper_visibility = 1;
+    }
 
     transfer_function_texture->needs_sync = 1;
 }

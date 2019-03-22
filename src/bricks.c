@@ -1,3 +1,17 @@
+/*
+ * The volume data is subdivided into separate "bricks" before being transferred
+ * to the GPU. This improves data locality on the GPU, and by alternating the
+ * orientation of the bricks the memory access pattern can be made more or less
+ * view independent (Weiskopf et al. (2004) "Maintaining constant frame rates in
+ * 3D texture-based volume rendering").
+
+ * By storing bricks in a space-partitioning tree, they can be efficiently sorted
+ * in back to front order when drawing, and invisible bricks can be skipped
+ * (Salama and Kolb, 2005). Each brick can additionally be subdivided into even
+ * smaller parts, so that most of the empty regions can be skipped (see Ruijters
+ * and Vilanova (2006) "Optimizing GPU Volume Rendering").
+ */
+
 #include "bricks.h"
 
 #include "error.h"
@@ -8,7 +22,6 @@
 
 
 #define MIN_PADDED_BRICK_SIZE 8
-
 
 
 typedef struct NodeIndices
@@ -25,12 +38,31 @@ static void copy_subarray_with_cycled_layout(const float* full_input_array,
                                              unsigned int cycle);
 
 static void create_brick_tree(BrickedField* bricked_field);
-static BrickTreeNode* create_brick_tree_nodes(const BrickedField* bricked_field, unsigned int level,
+static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsigned int level,
                                               NodeIndices start_indices, NodeIndices end_indices);
-static BrickTreeNode* create_brick_tree_leaf_node(const BrickedField* bricked_field, NodeIndices indices);
+static BrickTreeNode* create_brick_tree_leaf_node(BrickedField* bricked_field, NodeIndices indices);
+
+static void create_sub_brick_tree(Brick* brick, const Field* field);
+static SubBrickTreeNode* create_sub_brick_tree_nodes(const Brick* brick, const Field* field, unsigned int level,
+                                                     NodeIndices start_indices, NodeIndices end_indices);
+static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Field* field,
+                                                    NodeIndices start_indices, NodeIndices end_indices);
+
 static void destroy_brick_tree(BrickedField* bricked_field);
 static void destroy_brick_tree_node(BrickTreeNode* node);
 
+static void destroy_sub_brick_tree(Brick* brick);
+static void destroy_sub_brick_tree_node(SubBrickTreeNode* node);
+
+
+static unsigned int sub_brick_size_limit = 16;
+
+
+void set_min_sub_brick_size(unsigned int size)
+{
+    check(size > 0);
+    sub_brick_size_limit = 2*size;
+}
 
 void create_bricked_field(BrickedField* bricked_field, const Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
 {
@@ -101,9 +133,12 @@ void create_bricked_field(BrickedField* bricked_field, const Field* field, unsig
     size_t brick_idx;
     size_t data_offset = 0;
     unsigned int cycle;
-    size_t brick_size_x;
-    size_t brick_size_y;
-    size_t brick_size_z;
+    size_t unpadded_brick_offset_x;
+    size_t unpadded_brick_offset_y;
+    size_t unpadded_brick_offset_z;
+    size_t unpadded_brick_size_x;
+    size_t unpadded_brick_size_y;
+    size_t unpadded_brick_size_z;
     size_t padded_brick_size_x;
     size_t padded_brick_size_y;
     size_t padded_brick_size_z;
@@ -128,30 +163,42 @@ void create_bricked_field(BrickedField* bricked_field, const Field* field, unsig
                 cycle = (i + j + k) % 3;
                 brick->orientation = (enum brick_orientation)cycle;
 
+                unpadded_brick_offset_x = i*brick_size;
+                unpadded_brick_offset_y = j*brick_size;
+                unpadded_brick_offset_z = k*brick_size;
+
                 // Truncate the brick size if it reaches the upper edges of the field
-                brick_size_x = min_size_t(brick_size, field_size_x - i*brick_size);
-                brick_size_y = min_size_t(brick_size, field_size_y - j*brick_size);
-                brick_size_z = min_size_t(brick_size, field_size_z - k*brick_size);
+                unpadded_brick_size_x = min_size_t(brick_size, field_size_x - unpadded_brick_offset_x);
+                unpadded_brick_size_y = min_size_t(brick_size, field_size_y - unpadded_brick_offset_y);
+                unpadded_brick_size_z = min_size_t(brick_size, field_size_z - unpadded_brick_offset_z);
 
                 // Only the edges of the brick interior to the field are padded
-                padded_brick_size_x = brick_size_x + (i > 0)*pad_size + (i < n_bricks_x - 1)*pad_size;
-                padded_brick_size_y = brick_size_y + (j > 0)*pad_size + (j < n_bricks_y - 1)*pad_size;
-                padded_brick_size_z = brick_size_z + (k > 0)*pad_size + (k < n_bricks_z - 1)*pad_size;
+                padded_brick_size_x = unpadded_brick_size_x + (i > 0)*pad_size + (i < n_bricks_x - 1)*pad_size;
+                padded_brick_size_y = unpadded_brick_size_y + (j > 0)*pad_size + (j < n_bricks_y - 1)*pad_size;
+                padded_brick_size_z = unpadded_brick_size_z + (k > 0)*pad_size + (k < n_bricks_z - 1)*pad_size;
 
                 // The padded dimensions of the brick are listed from fastest to slowest varying
                 brick->padded_size[permutations[cycle][0]] = padded_brick_size_x;
                 brick->padded_size[permutations[cycle][1]] = padded_brick_size_y;
                 brick->padded_size[permutations[cycle][2]] = padded_brick_size_z;
 
+                brick->offset_x = unpadded_brick_offset_x + (i == 0)*pad_size;
+                brick->offset_y = unpadded_brick_offset_y + (j == 0)*pad_size;
+                brick->offset_z = unpadded_brick_offset_z + (k == 0)*pad_size;
+
+                brick->size_x = unpadded_brick_size_x - (i == 0)*pad_size - (i == n_bricks_x - 1)*pad_size;
+                brick->size_y = unpadded_brick_size_y - (j == 0)*pad_size - (j == n_bricks_y - 1)*pad_size;
+                brick->size_z = unpadded_brick_size_z - (k == 0)*pad_size - (k == n_bricks_z - 1)*pad_size;
+
                 set_vector3f_elements(&brick->spatial_offset,
-                                      (i*brick_size + (i == 0)*pad_size)*field->voxel_width  - field->halfwidth,
-                                      (j*brick_size + (j == 0)*pad_size)*field->voxel_height - field->halfheight,
-                                      (k*brick_size + (k == 0)*pad_size)*field->voxel_depth  - field->halfdepth);
+                                      brick->offset_x*field->voxel_width  - field->halfwidth,
+                                      brick->offset_y*field->voxel_height - field->halfheight,
+                                      brick->offset_z*field->voxel_depth  - field->halfdepth);
 
                 set_vector3f_elements(&brick->spatial_extent,
-                                      (brick_size_x - (i == 0)*pad_size - (i == n_bricks_x - 1)*pad_size)*field->voxel_width,
-                                      (brick_size_y - (j == 0)*pad_size - (j == n_bricks_y - 1)*pad_size)*field->voxel_height,
-                                      (brick_size_z - (k == 0)*pad_size - (k == n_bricks_z - 1)*pad_size)*field->voxel_depth);
+                                      brick->size_x*field->voxel_width,
+                                      brick->size_y*field->voxel_height,
+                                      brick->size_z*field->voxel_depth);
 
                 set_vector3f_elements(&brick->pad_fractions,
                                       (float)pad_size/padded_brick_size_x,
@@ -161,9 +208,9 @@ void create_bricked_field(BrickedField* bricked_field, const Field* field, unsig
                 data_offset += padded_brick_size_x*padded_brick_size_y*padded_brick_size_z;
 
                 // Decrease offset into the original data array to include the padding data (unless we are at a lower edge)
-                field_offset_x = i*brick_size - (i > 0)*pad_size;
-                field_offset_y = j*brick_size - (j > 0)*pad_size;
-                field_offset_z = k*brick_size - (k > 0)*pad_size;
+                field_offset_x = unpadded_brick_offset_x - (i > 0)*pad_size;
+                field_offset_y = unpadded_brick_offset_y - (j > 0)*pad_size;
+                field_offset_z = unpadded_brick_offset_z - (k > 0)*pad_size;
 
                 copy_subarray_with_cycled_layout(field_data,
                                                  field_size_x, field_size_y,
@@ -196,6 +243,8 @@ void destroy_bricked_field(BrickedField* bricked_field)
 {
     check(bricked_field);
 
+    destroy_brick_tree(bricked_field);
+
     bricked_field->field = NULL;
     bricked_field->n_bricks = 0;
 
@@ -207,8 +256,6 @@ void destroy_bricked_field(BrickedField* bricked_field)
 
     free(bricked_field->bricks);
     bricked_field->bricks = NULL;
-
-    destroy_brick_tree(bricked_field);
 }
 
 static void copy_subarray_with_cycled_layout(const float* full_input_array,
@@ -289,13 +336,10 @@ static void create_brick_tree(BrickedField* bricked_field)
     check(bricked_field->tree);
 }
 
-static BrickTreeNode* create_brick_tree_nodes(const BrickedField* bricked_field, unsigned int level,
+static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsigned int level,
                                               NodeIndices start_indices, NodeIndices end_indices)
 {
     assert(bricked_field);
-
-    BrickTreeNode* node = (BrickTreeNode*)malloc(sizeof(BrickTreeNode));
-    node->brick = NULL;
 
     unsigned int axis = level % 3;
 
@@ -316,6 +360,10 @@ static BrickTreeNode* create_brick_tree_nodes(const BrickedField* bricked_field,
             }
         }
     }
+
+    BrickTreeNode* node = (BrickTreeNode*)malloc(sizeof(BrickTreeNode));
+    node->brick = NULL;
+    node->visibility_ratio = 1.0f;
 
     node->split_axis = axis;
 
@@ -346,18 +394,112 @@ static BrickTreeNode* create_brick_tree_nodes(const BrickedField* bricked_field,
     return node;
 }
 
-static BrickTreeNode* create_brick_tree_leaf_node(const BrickedField* bricked_field, NodeIndices indices)
+static BrickTreeNode* create_brick_tree_leaf_node(BrickedField* bricked_field, NodeIndices indices)
 {
     assert(bricked_field);
 
     BrickTreeNode* node = (BrickTreeNode*)malloc(sizeof(BrickTreeNode));
     node->lower_child = NULL;
     node->upper_child = NULL;
+    node->visibility_ratio = 1.0f;
 
     node->brick = bricked_field->bricks + (indices.idx[2]*bricked_field->n_bricks_y + indices.idx[1])*bricked_field->n_bricks_x + indices.idx[0];
 
     copy_vector3f(&node->brick->spatial_offset, &node->spatial_offset);
     copy_vector3f(&node->brick->spatial_extent, &node->spatial_extent);
+
+    create_sub_brick_tree(node->brick, bricked_field->field);
+
+    return node;
+}
+
+static void create_sub_brick_tree(Brick* brick, const Field* field)
+{
+    assert(brick);
+    assert(field);
+
+    const NodeIndices start_indices = {{0, 0, 0}};
+    const NodeIndices end_indices = {{brick->size_x, brick->size_y, brick->size_z}};
+
+    brick->tree = create_sub_brick_tree_nodes(brick, field, 0, start_indices, end_indices);
+    check(brick->tree);
+}
+
+static SubBrickTreeNode* create_sub_brick_tree_nodes(const Brick* brick, const Field* field, unsigned int level,
+                                                     NodeIndices start_indices, NodeIndices end_indices)
+{
+    assert(brick);
+    assert(field);
+
+    SubBrickTreeNode* node = create_sub_brick_tree_node(brick, field, start_indices, end_indices);
+
+    unsigned int axis = level % 3;
+
+    // Advance the level until a divisible axis is found or return a leaf node if none is found
+    if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+    {
+        level++;
+        axis = level % 3;
+
+        if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+        {
+            level++;
+            axis = level % 3;
+
+            if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+            {
+                return node;
+            }
+        }
+    }
+
+    node->split_axis = axis;
+
+    // Subdivide along the current axis as close to the middle as possible (rounding down)
+    const size_t middle_idx = (size_t)(0.5f*(start_indices.idx[axis] + end_indices.idx[axis]));
+    assert(middle_idx > start_indices.idx[axis] && end_indices.idx[axis] > middle_idx);
+
+    // Create child node for the lower interval
+    NodeIndices new_end_indices = end_indices;
+    new_end_indices.idx[axis] = middle_idx;
+    node->lower_child = create_sub_brick_tree_nodes(brick, field, level + 1, start_indices, new_end_indices);
+
+    // Create child node for the upper interval
+    NodeIndices new_start_indices = start_indices;
+    new_start_indices.idx[axis] = middle_idx;
+    node->upper_child = create_sub_brick_tree_nodes(brick, field, level + 1, new_start_indices, end_indices);
+
+    return node;
+}
+
+static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Field* field,
+                                                    NodeIndices start_indices, NodeIndices end_indices)
+{
+    SubBrickTreeNode* node = (SubBrickTreeNode*)malloc(sizeof(SubBrickTreeNode));
+
+    node->lower_child = NULL;
+    node->upper_child = NULL;
+    node->split_axis = 0;
+
+    node->offset_x = brick->offset_x + start_indices.idx[0];
+    node->offset_y = brick->offset_y + start_indices.idx[1];
+    node->offset_z = brick->offset_z + start_indices.idx[2];
+
+    node->size_x = end_indices.idx[0] - start_indices.idx[0];
+    node->size_y = end_indices.idx[1] - start_indices.idx[1];
+    node->size_z = end_indices.idx[2] - start_indices.idx[2];
+
+    set_vector3f_elements(&node->spatial_offset,
+                          brick->spatial_offset.a[0] + start_indices.idx[0]*field->voxel_width,
+                          brick->spatial_offset.a[1] + start_indices.idx[1]*field->voxel_height,
+                          brick->spatial_offset.a[2] + start_indices.idx[2]*field->voxel_depth);
+
+    set_vector3f_elements(&node->spatial_extent,
+                          node->size_x*field->voxel_width,
+                          node->size_y*field->voxel_height,
+                          node->size_z*field->voxel_depth);
+
+    node->visibility_ratio = 1.0f;
 
     return node;
 }
@@ -376,11 +518,37 @@ static void destroy_brick_tree_node(BrickTreeNode* node)
 {
     assert(node);
 
+    if (node->brick)
+        destroy_sub_brick_tree(node->brick);
+
     if (node->lower_child)
         destroy_brick_tree_node(node->lower_child);
 
     if (node->upper_child)
         destroy_brick_tree_node(node->upper_child);
+
+    free(node);
+}
+
+static void destroy_sub_brick_tree(Brick* brick)
+{
+    assert(brick);
+
+    if (brick->tree)
+        destroy_sub_brick_tree_node(brick->tree);
+
+    brick->tree = NULL;
+}
+
+static void destroy_sub_brick_tree_node(SubBrickTreeNode* node)
+{
+    assert(node);
+
+    if (node->lower_child)
+        destroy_sub_brick_tree_node(node->lower_child);
+
+    if (node->upper_child)
+        destroy_sub_brick_tree_node(node->upper_child);
 
     free(node);
 }
