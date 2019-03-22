@@ -18,7 +18,7 @@ static void screen_coords_to_trackball_coords(double screen_coord_x, double scre
 
 
 static const double zoom_rate_modifier = 1e-2;
-static const float plane_separation_modifier = 1.0f;
+static const float plane_separation_modifier = 2.0f;
 
 static double trackball_radius = 1.0;
 
@@ -56,7 +56,6 @@ void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y,
     const float rotation_angle = (float)acos(dot3(&previous_trackball_point, &current_trackball_point));
 
     apply_origin_centered_view_rotation_about_axis(&rotation_axisf, rotation_angle);
-    sync_renderer();
 
     previous_trackball_point = current_trackball_point;
 }
@@ -71,7 +70,6 @@ void trackball_zoom_callback(double zoom_rate)
     const float scale = (float)exp(zoom_rate_modifier*zoom_rate);
     trackball_radius *= scale;
     apply_model_scaling(scale);
-    sync_renderer();
 }
 
 static Vector3 compute_trackball_point(double x, double y)
