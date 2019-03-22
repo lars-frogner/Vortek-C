@@ -2,7 +2,6 @@
 #define RENDERER_H
 
 void initialize_renderer(void);
-void sync_renderer(void);
 void cleanup_renderer(void);
 
 void update_renderer_window_size_in_pixels(int width, int height);

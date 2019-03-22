@@ -18,14 +18,23 @@ typedef struct WindowShape
     int height;
 } WindowShape;
 
+typedef struct SingleFieldRenderingState
+{
+    const char* texture_name;
+    const char* TF_name;
+} SingleFieldRenderingState;
+
 
 static void initialize_rendering_settings(void);
-static void initialize_single_field_rendering(void);
+static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state);
+static void post_initialize_single_field_rendering(SingleFieldRenderingState* state);
 
 
 static WindowShape window_shape;
 
 static ShaderProgram shader_program;
+
+static SingleFieldRenderingState single_field_rendering_state;
 
 
 void initialize_renderer(void)
@@ -34,6 +43,14 @@ void initialize_renderer(void)
 
     glGetError();
 
+    initialize_shader_program(&shader_program);
+
+    set_active_shader_program_for_transformation(&shader_program);
+    set_active_shader_program_for_planes(&shader_program);
+    set_active_shader_program_for_textures(&shader_program);
+    set_active_shader_program_for_field_textures(&shader_program);
+    set_active_shader_program_for_transfer_functions(&shader_program);
+
     initialize_rendering_settings();
     initialize_fields();
     initialize_transformation();
@@ -41,36 +58,29 @@ void initialize_renderer(void)
     initialize_textures();
     initialize_field_textures();
     initialize_transfer_functions();
-    initialize_shader_program(&shader_program);
 
-    initialize_single_field_rendering();
-
-    generate_shader_code_for_transformation(&shader_program);
-    generate_shader_code_for_planes(&shader_program);
+    pre_initialize_single_field_rendering(&single_field_rendering_state);
 
     compile_shader_program(&shader_program);
 
-    load_textures(&shader_program);
-    load_transformation(&shader_program);
-    load_planes(&shader_program);
+    load_transformation();
+    load_planes();
+    load_textures();
+    load_transfer_functions();
+
+    post_initialize_single_field_rendering(&single_field_rendering_state);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
-void sync_renderer(void)
-{
-    sync_transformation(&shader_program);
-    sync_planes(&shader_program);
-}
-
 void cleanup_renderer(void)
 {
-    cleanup_transformation();
-    cleanup_planes();
-    cleanup_fields();
     cleanup_transfer_functions();
     cleanup_field_textures();
     cleanup_textures();
+    cleanup_planes();
+    cleanup_transformation();
+    cleanup_fields();
     destroy_shader_program(&shader_program);
 }
 
@@ -87,25 +97,15 @@ void update_renderer_window_size_in_pixels(int width, int height)
 
 void renderer_update_callback(void)
 {
-    sync_transfer_functions();
-    sync_planes(&shader_program);
-
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glUseProgram(shader_program.id);
-    abort_on_GL_error("Could not use shader program");
-
-    //draw_planes();
-    draw_brick(0);
-
-    glUseProgram(0);
+    draw_active_bricked_field();
 }
 
 void renderer_resize_callback(int width, int height)
 {
     update_renderer_window_size_in_pixels(width, height);
     update_camera_aspect_ratio((float)width/height);
-    sync_transformation(&shader_program);
 }
 
 void renderer_key_action_callback(void)
@@ -116,10 +116,10 @@ static void initialize_rendering_settings(void)
     glDisable(GL_DEPTH_TEST);
     abort_on_GL_error("Could not disable depth testing");
 
-    //glEnable(GL_CULL_FACE);
-    //glCullFace(GL_BACK);
-    //glFrontFace(GL_CCW);
-    //abort_on_GL_error("Could not set face culling options");
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    abort_on_GL_error("Could not set face culling options");
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -128,44 +128,45 @@ static void initialize_rendering_settings(void)
     abort_on_GL_error("Could not set blending options");
 }
 
-static void initialize_single_field_rendering(void)
+static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state)
 {
+    check(state);
+
     Field* const field = create_field_from_bifrost_file("temperature_field",
                                                         "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
                                                         "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
-    field->extent_z = field->extent_x;
+
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
-    //clip_field_values(&field, 0.0f, field.max_value*0.04f);
+    state->texture_name = create_scalar_field_texture(field, 6, 2);
+    state->TF_name = create_transfer_function();
 
-    const char* texture_name = create_scalar_field_texture(field, &shader_program);
-    const char* TF_name = create_transfer_function(&shader_program);
-
-    /*const float low = 0.0f;//field_value_to_normalized_value(&field, 0);
-    const float high = 0.2f;
-
-    add_piecewise_linear_transfer_function_node(TF_name, TF_RED, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_name, TF_GREEN, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_name, TF_BLUE, low, 0);
-
-    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, 0, 0);
-    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, low, 0);
-    add_piecewise_linear_transfer_function_node(TF_name, TF_ALPHA, high, 1);*/
-
-    set_logarithmic_transfer_function(TF_name, TF_RED,   0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_name, TF_GREEN, 0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_name, TF_BLUE,  0, 1, 0, 1);
-    set_logarithmic_transfer_function(TF_name, TF_ALPHA, 0, 1, 0, 1);
-
-    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&shader_program.fragment_shader_source, texture_name, "out_tex_coord");
-    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&shader_program.fragment_shader_source, TF_name, field_texture_variable_number);
+    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&shader_program.fragment_shader_source, state->texture_name, "out_tex_coord");
+    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&shader_program.fragment_shader_source, state->TF_name, field_texture_variable_number);
     assign_variable_to_new_output_in_shader(&shader_program.fragment_shader_source, "vec4", mapped_field_texture_variable_number, "out_color");
+}
+
+static void post_initialize_single_field_rendering(SingleFieldRenderingState* state)
+{
+    check(state);
+
+    //set_transfer_function_upper_limit(state->TF_name, field_value_to_texture_value(state->texture_name, 5000.0f));
+    //set_transfer_function_upper_node(state->TF_name, TF_ALPHA, 0);
+
+    set_logarithmic_transfer_function(state->TF_name, TF_RED,   0, 1);
+    set_logarithmic_transfer_function(state->TF_name, TF_GREEN, 0, 1);
+    set_logarithmic_transfer_function(state->TF_name, TF_BLUE,  0, 1);
+    set_logarithmic_transfer_function(state->TF_name, TF_ALPHA, 0, 1);
+    //set_piecewise_linear_transfer_function_node(state->TF_name, TF_ALPHA, TF_START_NODE, 0);
+
+    //print_transfer_function(state->TF_name, TF_ALPHA);
 
     set_view_distance(2.0f);
 
-    update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f);
+    update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, PERSPECTIVE_PROJECTION);
+    //update_camera_properties(2.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, ORTHOGRAPHIC_PROJECTION);
 
-    set_active_bricked_field(get_bricked_field_texture(texture_name));
+    set_active_bricked_field(get_bricked_field_texture(state->texture_name));
     set_plane_separation(1.0f);
 }
