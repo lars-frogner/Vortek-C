@@ -13,11 +13,13 @@ typedef struct Texture
     DynamicString name;
 } Texture;
 
+void set_active_shader_program_for_textures(ShaderProgram* shader_program);
+
 void initialize_textures(void);
 
 Texture* create_texture(void);
 
-void load_textures(const ShaderProgram* shader_program);
+void load_textures(void);
 
 void destroy_texture(Texture* texture);
 void cleanup_textures(void);

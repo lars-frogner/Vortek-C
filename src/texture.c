@@ -11,20 +11,28 @@
 typedef struct ExtendedTexture
 {
     Texture texture;
-    GLint uniform_location;
+    Uniform uniform;
 } ExtendedTexture;
 
 
 static ExtendedTexture* get_texture(const char* name);
 static GLuint next_unused_texture_unit(void);
-static void set_texture_uniform(ExtendedTexture* extended_texture, const ShaderProgram* shader_program);
-static void unload_texture(Texture* texture);
+static void load_texture(ExtendedTexture* extended_texture);
+static void sync_texture(ExtendedTexture* extended_texture);
+static void delete_texture(Texture* texture);
 
 
 static HashMap textures;
 static LinkedList deleted_units;
 static GLuint next_undeleted_unused_unit;
 
+static ShaderProgram* active_shader_program = NULL;
+
+
+void set_active_shader_program_for_textures(ShaderProgram* shader_program)
+{
+    active_shader_program = shader_program;
+}
 
 void initialize_textures(void)
 {
@@ -48,33 +56,41 @@ Texture* create_texture(void)
     ExtendedTexture* const extended_texture = (ExtendedTexture*)item.data;
 
     extended_texture->texture = texture;
-    extended_texture->uniform_location = 0;
+
+    initialize_uniform(&extended_texture->uniform, texture.name.chars);
 
     return &extended_texture->texture;
 }
 
-void load_textures(const ShaderProgram* shader_program)
+void load_textures(void)
 {
-    check(shader_program);
+    check(active_shader_program);
 
     for (reset_map_iterator(&textures); valid_map_iterator(&textures); advance_map_iterator(&textures))
     {
         ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
-        set_texture_uniform(extended_texture, shader_program);
+        load_texture(extended_texture);
     }
 }
 
 void destroy_texture(Texture* texture)
 {
-    unload_texture(texture);
+    check(texture);
+
+    delete_texture(texture);
 
     ListItem item = append_new_list_item(&deleted_units, sizeof(GLuint));
     GLuint* const unit = (GLuint*)item.data;
     *unit = texture->unit;
 
+    ExtendedTexture* const extended_texture = get_texture(texture->name.chars);
+
     DynamicString texture_name_copy = create_duplicate_string(&texture->name);
     clear_string(&texture->name);
+    destroy_uniform(&extended_texture->uniform);
+
     remove_map_item(&textures, texture_name_copy.chars);
+
     clear_string(&texture_name_copy);
 }
 
@@ -83,8 +99,9 @@ void cleanup_textures(void)
     for (reset_map_iterator(&textures); valid_map_iterator(&textures); advance_map_iterator(&textures))
     {
         ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
-        unload_texture(&extended_texture->texture);
+        delete_texture(&extended_texture->texture);
         clear_string(&extended_texture->texture.name);
+        destroy_uniform(&extended_texture->uniform);
     }
 
     destroy_map(&textures);
@@ -120,30 +137,38 @@ static GLuint next_unused_texture_unit(void)
     return unit;
 }
 
-static void set_texture_uniform(ExtendedTexture* extended_texture, const ShaderProgram* shader_program)
+static void load_texture(ExtendedTexture* extended_texture)
 {
-    check(extended_texture);
+    assert(active_shader_program);
+    assert(extended_texture);
 
-    if (extended_texture->texture.name.length == 0)
-        print_severe_message("Cannot set uniform for texture with no name.");
+    load_uniform(active_shader_program, &extended_texture->uniform);
 
-    extended_texture->uniform_location = glGetUniformLocation(shader_program->id, extended_texture->texture.name.chars);
-    abort_on_GL_error("Could not get texture uniform location");
+    extended_texture->uniform.needs_update = 1;
 
-    if (extended_texture->uniform_location == -1)
+    sync_texture(extended_texture);
+}
+
+static void sync_texture(ExtendedTexture* extended_texture)
+{
+    assert(active_shader_program);
+    assert(extended_texture);
+
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program for updating field texture uniforms");
+
+    if (extended_texture->uniform.needs_update)
     {
-        print_warning_message("Texture \"%s\" not used in shader program.", extended_texture->texture.name.chars);
-        return;
+        glUniform1i(extended_texture->uniform.location, (GLint)extended_texture->texture.unit);
+        abort_on_GL_error("Could not set texture uniform location");
+
+        extended_texture->uniform.needs_update = 0;
     }
 
-    glUseProgram(shader_program->id);
-    abort_on_GL_error("Could not use shader program when updating texture uniform");
-    glUniform1i(extended_texture->uniform_location, (GLint)extended_texture->texture.unit);
-    abort_on_GL_error("Could not set texture uniform location");
     glUseProgram(0);
 }
 
-static void unload_texture(Texture* texture)
+static void delete_texture(Texture* texture)
 {
     check(texture);
 
