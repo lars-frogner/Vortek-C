@@ -2,6 +2,7 @@
 #define DYNAMIC_STRING_H
 
 #include <stddef.h>
+#include <stdarg.h>
 
 typedef struct DynamicString
 {
@@ -13,6 +14,7 @@ typedef struct DynamicString
 DynamicString create_empty_string(void);
 DynamicString create_duplicate_string(const DynamicString* source_string);
 DynamicString create_string(const char* chars, ...);
+DynamicString create_string_from_arg_list(const char* chars, va_list args);
 
 void copy_string(DynamicString* destination_string, const DynamicString* source_string);
 

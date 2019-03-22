@@ -2,7 +2,6 @@
 
 #include "error.h"
 
-#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -56,6 +55,29 @@ DynamicString create_string(const char* chars, ...)
     va_start(args, chars);
     vsprintf(string.chars, chars, args);
     va_end(args);
+
+    return string;
+}
+
+DynamicString create_string_from_arg_list(const char* chars, va_list args)
+{
+    check(chars);
+
+    DynamicString string;
+
+    va_list args_copy;
+
+    va_copy(args_copy, args);
+    const int length = vsnprintf(NULL, 0, chars, args_copy);
+    va_end(args_copy);
+
+    check(length > 0);
+    string.length = (size_t)length;
+    string.size = sizeof(char)*(string.length + 1);
+
+    string.chars = (char*)malloc(string.size);
+
+    vsprintf(string.chars, chars, args);
 
     return string;
 }
