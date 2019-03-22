@@ -12,7 +12,8 @@ void load_planes(void);
 
 void set_active_bricked_field(const BrickedField* bricked_field);
 
-void set_visibility_threshold(float threshold);
+void set_lower_visibility_threshold(float threshold);
+void set_upper_visibility_threshold(float threshold);
 
 void set_plane_separation(float spacing_multiplier);
 float get_plane_separation(void);

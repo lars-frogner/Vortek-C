@@ -169,8 +169,6 @@ static void post_initialize_single_field_rendering(SingleFieldRenderingState* st
 
     //print_transfer_function(state->TF_name, TF_ALPHA);
 
-    //set_visibility_threshold(1e-3f);
-
     set_view_distance(2.0f);
 
     update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, PERSPECTIVE_PROJECTION);

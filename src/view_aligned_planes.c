@@ -171,7 +171,8 @@ static Uniform orientation_uniform;
 
 static Uniform sampling_correction_uniform;
 
-static float visibility_threshold = 0.0f;
+static float lower_visibility_threshold = 0.0f;
+static float upper_visibility_threshold = 0.9f;
 
 static ActiveBrickedField active_bricked_field = {NULL, NULL, NULL, 0, 0};
 
@@ -268,10 +269,16 @@ void set_active_bricked_field(const BrickedField* bricked_field)
     sync_planes();
 }
 
-void set_visibility_threshold(float threshold)
+void set_lower_visibility_threshold(float threshold)
 {
-    check(threshold >= 0.0f && threshold <= 1.0f);
-    visibility_threshold = threshold;
+    check(threshold >= 0.0f && threshold <= upper_visibility_threshold);
+    lower_visibility_threshold = threshold;
+}
+
+void set_upper_visibility_threshold(float threshold)
+{
+    check(threshold >= lower_visibility_threshold && threshold <= 1.0f);
+    upper_visibility_threshold = threshold;
 }
 
 void set_plane_separation(float spacing_multiplier)
@@ -674,7 +681,7 @@ static void draw_brick_tree_nodes(const BrickTreeNode* node)
     assert(node);
 
     // If the brick is invisible, stop traversal of this branch
-    if (node->visibility_ratio <= visibility_threshold)
+    if (node->visibility_ratio <= lower_visibility_threshold)
         return;
 
     if (node->brick)
@@ -742,15 +749,15 @@ static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
 {
     assert(node);
 
-    if (node->visibility_ratio <= visibility_threshold)
+    if (node->visibility_ratio <= lower_visibility_threshold)
     {
         // If the sub brick is invisible, stop traversal of this branch
         return;
     }
     else
     {
-        // If the sub brick is not 100 % visible and it has children, traverse these recursively
-        if (node->visibility_ratio < 1.0f && node->lower_child)
+        // If the sub brick is not sufficiently visible and it has children, traverse these recursively
+        if (node->visibility_ratio < upper_visibility_threshold && node->lower_child)
         {
             assert(node->upper_child);
 
@@ -768,7 +775,7 @@ static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
         }
         else
         {
-            // If the sub brick has no transparent regions or is a leaf node, draw it
+            // If the sub brick is sufficiently visible or is a leaf node, draw it
             draw_sub_brick(node);
         }
     }
