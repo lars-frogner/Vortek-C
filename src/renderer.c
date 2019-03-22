@@ -133,11 +133,13 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     check(state);
 
     Field* const field = create_field_from_bifrost_file("temperature_field",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_hires.raw",
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_hires.dat");
 
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
+
+    set_min_sub_brick_size(8);
 
     state->texture_name = create_scalar_field_texture(field, 6, 2);
     state->TF_name = create_transfer_function();
@@ -154,19 +156,26 @@ static void post_initialize_single_field_rendering(SingleFieldRenderingState* st
     //set_transfer_function_upper_limit(state->TF_name, field_value_to_texture_value(state->texture_name, 5000.0f));
     //set_transfer_function_upper_node(state->TF_name, TF_ALPHA, 0);
 
+    set_transfer_function_lower_limit(state->TF_name, field_value_to_texture_value(state->texture_name, 30000.0f));
+    set_transfer_function_lower_node(state->TF_name, TF_ALPHA, 0);
+
     set_logarithmic_transfer_function(state->TF_name, TF_RED,   0, 1);
     set_logarithmic_transfer_function(state->TF_name, TF_GREEN, 0, 1);
     set_logarithmic_transfer_function(state->TF_name, TF_BLUE,  0, 1);
     set_logarithmic_transfer_function(state->TF_name, TF_ALPHA, 0, 1);
     //set_piecewise_linear_transfer_function_node(state->TF_name, TF_ALPHA, TF_START_NODE, 0);
 
+    update_visibility_ratios(state->TF_name, get_texture_bricked_field(state->texture_name));
+
     //print_transfer_function(state->TF_name, TF_ALPHA);
+
+    //set_visibility_threshold(1e-3f);
 
     set_view_distance(2.0f);
 
     update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, PERSPECTIVE_PROJECTION);
     //update_camera_properties(2.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, ORTHOGRAPHIC_PROJECTION);
 
-    set_active_bricked_field(get_bricked_field_texture(state->texture_name));
-    set_plane_separation(1.0f);
+    set_active_bricked_field(get_texture_bricked_field(state->texture_name));
+    set_plane_separation(0.5f);
 }
