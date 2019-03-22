@@ -60,7 +60,7 @@ const char* create_scalar_field_texture(const Field* field, unsigned int brick_s
     return texture->name.chars;
 }
 
-const BrickedField* get_bricked_field_texture(const char* name)
+BrickedField* get_texture_bricked_field(const char* name)
 {
     FieldTexture* const field_texture = get_field_texture(name);
     return &field_texture->bricked_field;
