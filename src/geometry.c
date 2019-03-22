@@ -97,6 +97,14 @@ Vector3f extract_vector3f_from_vector4f(const Vector4f* v)
     return result;
 }
 
+Vector3f homogenize_vector4f(const Vector4f* v)
+{
+    assert(v->a[3] != 0);
+    const float norm = 1.0f/v->a[3];
+    Vector3f result = {{v->a[0]*norm, v->a[1]*norm, v->a[2]*norm}};
+    return result;
+}
+
 void set_matrix4f_elements(Matrix4f* m,
                            float a11, float a12, float a13, float a14,
                            float a21, float a22, float a23, float a24,
@@ -182,6 +190,14 @@ Vector3 subtract_vector3(const Vector3* v1, const Vector3* v2)
     return result;
 }
 
+Vector3 multiply_vector3(const Vector3* v1, const Vector3* v2)
+{
+    assert(v1);
+    assert(v2);
+    Vector3 result = {{v1->a[0]*v2->a[0], v1->a[1]*v2->a[1], v1->a[2]*v2->a[2]}};
+    return result;
+}
+
 Vector3 scale_vector3(const Vector3* v, double scale)
 {
     assert(v);
@@ -202,6 +218,14 @@ Vector3f subtract_vector3f(const Vector3f* v1, const Vector3f* v2)
     assert(v1);
     assert(v2);
     Vector3f result = {{v1->a[0] - v2->a[0], v1->a[1] - v2->a[1], v1->a[2] - v2->a[2]}};
+    return result;
+}
+
+Vector3f multiply_vector3f(const Vector3f* v1, const Vector3f* v2)
+{
+    assert(v1);
+    assert(v2);
+    Vector3f result = {{v1->a[0]*v2->a[0], v1->a[1]*v2->a[1], v1->a[2]*v2->a[2]}};
     return result;
 }
 
@@ -260,7 +284,7 @@ Vector3f cross3f(const Vector3f* v1, const Vector3f* v2)
     return result;
 }
 
-Matrix4f matmul4f(const Matrix4f* m1, const Matrix4f* m2)
+Matrix4f multiply_matrix4f(const Matrix4f* m1, const Matrix4f* m2)
 {
     assert(m1);
     assert(m2);
@@ -284,7 +308,7 @@ Matrix4f matmul4f(const Matrix4f* m1, const Matrix4f* m2)
     return result;
 }
 
-Vector4f matvecmul4f(const Matrix4f* m, const Vector4f* v)
+Vector4f multiply_matrix4f_vector4f(const Matrix4f* m, const Vector4f* v)
 {
     assert(m);
     assert(v);
@@ -294,6 +318,24 @@ Vector4f matvecmul4f(const Matrix4f* m, const Vector4f* v)
     result.a[2] = m->a[ 8]*v->a[0] + m->a[ 9]*v->a[1] + m->a[10]*v->a[2] + m->a[11]*v->a[3];
     result.a[3] = m->a[12]*v->a[0] + m->a[13]*v->a[1] + m->a[14]*v->a[2] + m->a[15]*v->a[3];
     return result;
+}
+
+Vector3f multiply_matrix4f_vector3f(const Matrix4f* m, const Vector3f* v)
+{
+    assert(m);
+    assert(v);
+    Vector3f result;
+    result.a[0] = m->a[ 0]*v->a[0] + m->a[ 1]*v->a[1] + m->a[ 2]*v->a[2] + m->a[ 3];
+    result.a[1] = m->a[ 4]*v->a[0] + m->a[ 5]*v->a[1] + m->a[ 6]*v->a[2] + m->a[ 7];
+    result.a[2] = m->a[ 8]*v->a[0] + m->a[ 9]*v->a[1] + m->a[10]*v->a[2] + m->a[11];
+    return result;
+}
+
+float multiply_matrix4f_vector3f_z_only(const Matrix4f* m, const Vector3f* v)
+{
+    assert(m);
+    assert(v);
+    return m->a[8]*v->a[0] + m->a[9]*v->a[1] + m->a[10]*v->a[2] + m->a[11];
 }
 
 void invert_matrix4f(Matrix4f* m)
@@ -506,64 +548,84 @@ void normalize_vector3f(Vector3f* v)
     v->a[2] *= scale;
 }
 
-void get_matrix4f_x_y_z_basis_vectors(const Matrix4f* m, Vector3f* x_basis_vector, Vector3f* y_basis_vector, Vector3f* z_basis_vector)
+void get_matrix4f_first_column_vector3f(const Matrix4f* m, Vector3f* column_vector)
 {
     assert(m);
-    assert(x_basis_vector);
-    assert(y_basis_vector);
-    assert(z_basis_vector);
+    assert(column_vector);
 
-    x_basis_vector->a[0] = m->a[ 0];
-    x_basis_vector->a[1] = m->a[ 4];
-    x_basis_vector->a[2] = m->a[ 8];
-
-    y_basis_vector->a[0] = m->a[ 1];
-    y_basis_vector->a[1] = m->a[ 5];
-    y_basis_vector->a[2] = m->a[ 9];
-
-    z_basis_vector->a[0] = m->a[ 2];
-    z_basis_vector->a[1] = m->a[ 6];
-    z_basis_vector->a[2] = m->a[10];
+    column_vector->a[0] = m->a[ 0];
+    column_vector->a[1] = m->a[ 4];
+    column_vector->a[2] = m->a[ 8];
 }
 
-void get_matrix4f_x_basis_vector(const Matrix4f* m, Vector3f* x_basis_vector)
+void get_matrix4f_second_column_vector3f(const Matrix4f* m, Vector3f* column_vector)
 {
     assert(m);
-    assert(x_basis_vector);
+    assert(column_vector);
 
-    x_basis_vector->a[0] = m->a[ 0];
-    x_basis_vector->a[1] = m->a[ 4];
-    x_basis_vector->a[2] = m->a[ 8];
+    column_vector->a[0] = m->a[ 1];
+    column_vector->a[1] = m->a[ 5];
+    column_vector->a[2] = m->a[ 9];
 }
 
-void get_matrix4f_y_basis_vector(const Matrix4f* m, Vector3f* y_basis_vector)
+void get_matrix4f_third_column_vector3f(const Matrix4f* m, Vector3f* column_vector)
 {
     assert(m);
-    assert(y_basis_vector);
+    assert(column_vector);
 
-    y_basis_vector->a[0] = m->a[ 1];
-    y_basis_vector->a[1] = m->a[ 5];
-    y_basis_vector->a[2] = m->a[ 9];
+    column_vector->a[0] = m->a[ 2];
+    column_vector->a[1] = m->a[ 6];
+    column_vector->a[2] = m->a[10];
 }
 
-void get_matrix4f_z_basis_vector(const Matrix4f* m, Vector3f* z_basis_vector)
+void get_matrix4f_fourth_column_vector3f(const Matrix4f* m, Vector3f* column_vector)
 {
     assert(m);
-    assert(z_basis_vector);
+    assert(column_vector);
 
-    z_basis_vector->a[0] = m->a[ 2];
-    z_basis_vector->a[1] = m->a[ 6];
-    z_basis_vector->a[2] = m->a[10];
+    column_vector->a[0] = m->a[ 3];
+    column_vector->a[1] = m->a[ 7];
+    column_vector->a[2] = m->a[11];
 }
 
-void get_matrix4f_w_basis_vector(const Matrix4f* m, Vector3f* w_basis_vector)
+void get_matrix4f_first_row_vector3f(const Matrix4f* m, Vector3f* row_vector)
 {
     assert(m);
-    assert(w_basis_vector);
+    assert(row_vector);
 
-    w_basis_vector->a[0] = m->a[ 3];
-    w_basis_vector->a[1] = m->a[ 7];
-    w_basis_vector->a[2] = m->a[11];
+    row_vector->a[0] = m->a[ 0];
+    row_vector->a[1] = m->a[ 1];
+    row_vector->a[2] = m->a[ 2];
+}
+
+void get_matrix4f_second_row_vector3f(const Matrix4f* m, Vector3f* row_vector)
+{
+    assert(m);
+    assert(row_vector);
+
+    row_vector->a[0] = m->a[ 4];
+    row_vector->a[1] = m->a[ 5];
+    row_vector->a[2] = m->a[ 6];
+}
+
+void get_matrix4f_third_row_vector3f(const Matrix4f* m, Vector3f* row_vector)
+{
+    assert(m);
+    assert(row_vector);
+
+    row_vector->a[0] = m->a[ 8];
+    row_vector->a[1] = m->a[ 9];
+    row_vector->a[2] = m->a[10];
+}
+
+void get_matrix4f_fourth_row_vector3f(const Matrix4f* m, Vector3f* row_vector)
+{
+    assert(m);
+    assert(row_vector);
+
+    row_vector->a[0] = m->a[12];
+    row_vector->a[1] = m->a[13];
+    row_vector->a[2] = m->a[14];
 }
 
 Matrix4f create_scaling_transform(float sx, float sy, float sz)
@@ -653,17 +715,17 @@ Matrix4f create_rotation_about_axis_transform(const Vector3f* axis, float angle)
     return result;
 }
 
-Matrix4f create_perspective_transform(float vertical_field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance)
+Matrix4f create_perspective_transform(float field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance)
 {
-    assert(vertical_field_of_view > 0 && vertical_field_of_view < 360.0f);
+    assert(field_of_view > 0 && field_of_view < 360.0f);
     assert(aspect_ratio > 0);
     assert(near_plane_distance > 0);
     assert(far_plane_distance > near_plane_distance);
 
     Matrix4f result = {{0}};
 
-    const float y_scale = cotangent(degrees_to_radians(vertical_field_of_view/2));
-    const float x_scale = y_scale/aspect_ratio;
+    const float x_scale = cotangent(degrees_to_radians(field_of_view/2));
+    const float y_scale = x_scale*aspect_ratio;
     const float frustum_length = far_plane_distance - near_plane_distance;
 
     result.a[ 0] = x_scale;
@@ -671,6 +733,27 @@ Matrix4f create_perspective_transform(float vertical_field_of_view, float aspect
     result.a[10] = -(far_plane_distance + near_plane_distance)/frustum_length;
     result.a[11] = -(2*near_plane_distance*far_plane_distance)/frustum_length;
     result.a[14] = -1;
+
+    return result;
+}
+
+Matrix4f create_orthographic_transform(float width, float aspect_ratio, float near_plane_distance, float far_plane_distance)
+{
+    assert(width > 0);
+    assert(aspect_ratio > 0);
+    assert(near_plane_distance > 0);
+    assert(far_plane_distance > near_plane_distance);
+
+    Matrix4f result = {{0}};
+
+    const float height = width*aspect_ratio;
+    const float depth = far_plane_distance - near_plane_distance;
+
+    result.a[ 0] = 2.0f/width;
+    result.a[ 5] = 2.0f/height;
+    result.a[10] = -2.0f/depth;
+    result.a[11] = -(far_plane_distance + near_plane_distance)/depth;
+    result.a[15] = 1;
 
     return result;
 }
@@ -802,7 +885,7 @@ void apply_rotation_about_axis(Matrix4f* m, const Vector3f* axis, float angle)
     assert(axis);
 
     const Matrix4f rotation = create_rotation_about_axis_transform(axis, angle);
-    *m = matmul4f(&rotation, m);
+    *m = multiply_matrix4f(&rotation, m);
 }
 
 void set_transform_translation(Matrix4f* m, float dx, float dy, float dz)

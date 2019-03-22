@@ -43,6 +43,8 @@ Vector4f create_vector4f(float x, float y, float z, float w);
 Vector4f extend_vector3f_to_vector4f(const Vector3f* v, float w);
 Vector3f extract_vector3f_from_vector4f(const Vector4f* v);
 
+Vector3f homogenize_vector4f(const Vector4f* v);
+
 void set_matrix4f_elements(Matrix4f* m,
                            float a11, float a12, float a13, float a14,
                            float a21, float a22, float a23, float a24,
@@ -59,10 +61,12 @@ int equal_vector3f(const Vector3f* v1, const Vector3f* v2);
 
 Vector3 add_vector3(const Vector3* v1, const Vector3* v2);
 Vector3 subtract_vector3(const Vector3* v1, const Vector3* v2);
+Vector3 multiply_vector3(const Vector3* v1, const Vector3* v2);
 Vector3 scale_vector3(const Vector3* v, double scale);
 
 Vector3f add_vector3f(const Vector3f* v1, const Vector3f* v2);
 Vector3f subtract_vector3f(const Vector3f* v1, const Vector3f* v2);
+Vector3f multiply_vector3f(const Vector3f* v1, const Vector3f* v2);
 Vector3f scale_vector3f(const Vector3f* v, float scale);
 
 double norm3(const Vector3* v);
@@ -77,14 +81,19 @@ Vector3f cross3f(const Vector3f* v1, const Vector3f* v2);
 void normalize_vector3(Vector3* v);
 void normalize_vector3f(Vector3f* v);
 
-void get_matrix4f_x_y_z_basis_vectors(const Matrix4f* m, Vector3f* x_basis_vector, Vector3f* y_basis_vector, Vector3f* z_basis_vector);
-void get_matrix4f_x_basis_vector(const Matrix4f* m, Vector3f* x_basis_vector);
-void get_matrix4f_y_basis_vector(const Matrix4f* m, Vector3f* y_basis_vector);
-void get_matrix4f_z_basis_vector(const Matrix4f* m, Vector3f* z_basis_vector);
-void get_matrix4f_w_basis_vector(const Matrix4f* m, Vector3f* w_basis_vector);
+void get_matrix4f_first_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
+void get_matrix4f_second_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
+void get_matrix4f_third_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
+void get_matrix4f_fourth_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
+void get_matrix4f_first_row_vector3f(const Matrix4f* m, Vector3f* row_vector);
+void get_matrix4f_second_row_vector3f(const Matrix4f* m, Vector3f* row_vector);
+void get_matrix4f_third_row_vector3f(const Matrix4f* m, Vector3f* row_vector);
+void get_matrix4f_fourth_row_vector3f(const Matrix4f* m, Vector3f* row_vector);
 
-Matrix4f matmul4f(const Matrix4f* m1, const Matrix4f* m2);
-Vector4f matvecmul4f(const Matrix4f* m, const Vector4f* v);
+Matrix4f multiply_matrix4f(const Matrix4f* m1, const Matrix4f* m2);
+Vector4f multiply_matrix4f_vector4f(const Matrix4f* m, const Vector4f* v);
+Vector3f multiply_matrix4f_vector3f(const Matrix4f* m, const Vector3f* v);
+float multiply_matrix4f_vector3f_z_only(const Matrix4f* m, const Vector3f* v);
 void invert_matrix4f(Matrix4f* m);
 void invert_matrix4f_3x3_submatrix(Matrix4f* m);
 
@@ -94,7 +103,8 @@ Matrix4f create_rotation_about_x_transform(float angle);
 Matrix4f create_rotation_about_y_transform(float angle);
 Matrix4f create_rotation_about_z_transform(float angle);
 Matrix4f create_rotation_about_axis_transform(const Vector3f* axis, float angle);
-Matrix4f create_perspective_transform(float vertical_field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance);
+Matrix4f create_perspective_transform(float field_of_view, float aspect_ratio, float near_plane_distance, float far_plane_distance);
+Matrix4f create_orthographic_transform(float width, float aspect_ratio, float near_plane_distance, float far_plane_distance);
 
 void apply_scaling(Matrix4f* m, float sx, float sy, float sz);
 void apply_translation(Matrix4f* m, float dx, float dy, float dz);
