@@ -89,6 +89,19 @@ void add_array_uniform_in_shader(ShaderSource* source, const char* type, const c
     insert_string_in_map(&source->global_variable_expressions, name, "uniform %s %s[%d];\n", type, name, length);
 }
 
+void add_clip_distance_output_in_shader(ShaderSource* source, unsigned int max_clip_distances)
+{
+    check(source);
+
+    insert_string_in_map(&source->global_variable_expressions, "gl_PerVertex",
+                         "out gl_PerVertex\n"
+                         "{\n"
+                         "    vec4 gl_Position;\n"
+                         "    float gl_ClipDistance[%d];\n"
+                         "};\n",
+                         max_clip_distances);
+}
+
 size_t transform_input_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name)
 {
     check(source);
@@ -174,8 +187,37 @@ size_t apply_transfer_function_in_shader(ShaderSource* source, const char* trans
     return variable->number;
 }
 
-size_t add_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet,
-                             LinkedList* global_dependencies, LinkedList* variable_dependencies)
+void add_output_snippet_in_shader(ShaderSource* source, const char* snippet,
+                                  LinkedList* global_dependencies, LinkedList* variable_dependencies)
+{
+    check(source);
+    check(snippet);
+
+    Variable* const variable = create_variable(source);
+
+    set_string(&variable->expression, "%s\n", snippet);
+
+    if (global_dependencies)
+    {
+        for (reset_list_iterator(global_dependencies); valid_list_iterator(global_dependencies); advance_list_iterator(global_dependencies))
+        {
+            add_global_dependency(variable, get_current_string_from_list(global_dependencies));
+        }
+    }
+
+    if (variable_dependencies)
+    {
+        for (reset_list_iterator(variable_dependencies); valid_list_iterator(variable_dependencies); advance_list_iterator(variable_dependencies))
+        {
+            add_variable_dependency(variable, get_current_size_t_from_list(variable_dependencies));
+        }
+    }
+
+    append_size_t_to_list(&source->output_variables, variable->number);
+}
+
+size_t add_variable_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet,
+                                      LinkedList* global_dependencies, LinkedList* variable_dependencies)
 {
     check(source);
     check(output_type);

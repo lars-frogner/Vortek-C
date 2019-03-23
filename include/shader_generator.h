@@ -24,6 +24,8 @@ void add_vertex_input_in_shader(ShaderSource* source, const char* type, const ch
 void add_uniform_in_shader(ShaderSource* source, const char* type, const char* name);
 void add_array_uniform_in_shader(ShaderSource* source, const char* type, const char* name, size_t length);
 
+void add_clip_distance_output_in_shader(ShaderSource* source, unsigned int max_clip_distances);
+
 size_t transform_input_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name);
 
 void add_field_texture_in_shader(ShaderSource* source, const char* texture_name);
@@ -32,7 +34,10 @@ size_t apply_scalar_field_texture_sampling_in_shader(ShaderSource* source, const
 void add_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name);
 size_t apply_transfer_function_in_shader(ShaderSource* source, const char* transfer_function_name, size_t input_variable_number);
 
-size_t add_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name, const char* snippet, LinkedList* global_dependencies, LinkedList* variable_dependencies);
+void add_output_snippet_in_shader(ShaderSource* source, const char* snippet,
+                                  LinkedList* global_dependencies, LinkedList* variable_dependencies);
+size_t add_variable_snippet_in_shader(ShaderSource* source, const char* output_type, const char* output_name,
+                                      const char* snippet, LinkedList* global_dependencies, LinkedList* variable_dependencies);
 
 void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_number, const char* output_name);
 void assign_transformed_variable_to_output_in_shader(ShaderSource* source, const char* matrix_name, size_t variable_number, const char* output_name);
