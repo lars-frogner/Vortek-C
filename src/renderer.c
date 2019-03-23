@@ -9,6 +9,7 @@
 #include "field_textures.h"
 #include "transfer_functions.h"
 #include "view_aligned_planes.h"
+#include "clip_planes.h"
 #include "shader_generator.h"
 
 
@@ -47,6 +48,7 @@ void initialize_renderer(void)
 
     set_active_shader_program_for_transformation(&shader_program);
     set_active_shader_program_for_planes(&shader_program);
+    set_active_shader_program_for_clip_planes(&shader_program);
     set_active_shader_program_for_textures(&shader_program);
     set_active_shader_program_for_field_textures(&shader_program);
     set_active_shader_program_for_transfer_functions(&shader_program);
@@ -55,6 +57,7 @@ void initialize_renderer(void)
     initialize_fields();
     initialize_transformation();
     initialize_planes();
+    initialize_clip_planes();
     initialize_textures();
     initialize_field_textures();
     initialize_transfer_functions();
@@ -65,6 +68,7 @@ void initialize_renderer(void)
 
     load_transformation();
     load_planes();
+    load_clip_planes();
     load_textures();
     load_transfer_functions();
 
@@ -78,6 +82,7 @@ void cleanup_renderer(void)
     cleanup_transfer_functions();
     cleanup_field_textures();
     cleanup_textures();
+    cleanup_clip_planes();
     cleanup_planes();
     cleanup_transformation();
     cleanup_fields();
@@ -133,13 +138,13 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     check(state);
 
     Field* const field = create_field_from_bifrost_file("temperature_field",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_hires.raw",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg_hires.dat");
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
+                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
 
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
-    set_min_sub_brick_size(8);
+    set_min_sub_brick_size(6);
 
     state->texture_name = create_scalar_field_texture(field, 6, 2);
     state->TF_name = create_transfer_function();

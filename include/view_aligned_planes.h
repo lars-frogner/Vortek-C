@@ -18,6 +18,12 @@ void set_upper_visibility_threshold(float threshold);
 void set_plane_separation(float spacing_multiplier);
 float get_plane_separation(void);
 
+size_t get_vertex_position_variable_number(void);
+
+const Vector3f* get_unit_axis_aligned_box_corners(void);
+unsigned int get_axis_aligned_box_back_corner_for_plane(const Vector3f* plane_normal);
+unsigned int get_axis_aligned_box_front_corner_for_plane(const Vector3f* plane_normal);
+
 void draw_active_bricked_field(void);
 
 void cleanup_planes(void);

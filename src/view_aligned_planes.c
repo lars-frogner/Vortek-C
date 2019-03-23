@@ -16,6 +16,7 @@
 #include "linked_list.h"
 #include "transformation.h"
 #include "shader_generator.h"
+#include "clip_planes.h"
 
 #include <stdlib.h>
 #include <math.h>
@@ -120,6 +121,12 @@ static Vector3f corners[8] = {{{0, 0, 0}},  //   /|         /|
                               {{0, 1, 1}},  // |/         |/
                               {{1, 1, 1}}}; // 3----------4
 
+static const unsigned int back_corners[2][2][2] = {{{0, 3}, {2, 6}},
+                                                   {{1, 4}, {5, 7}}};
+
+static const unsigned int front_corners[2][2][2] = {{{7, 5}, {4, 1}},
+                                                    {{6, 2}, {3, 0}}};
+
 static const unsigned int opposite_corners[8] = {7, 6, 4, 5, 2, 3, 1, 0};
 
 // Brick corner permutations corresponding to the 8 different rotational arrangements
@@ -171,6 +178,9 @@ static Uniform orientation_uniform;
 
 static Uniform sampling_correction_uniform;
 
+static size_t position_variable_number;
+static size_t tex_coord_variable_number;
+
 static float lower_visibility_threshold = 0.0f;
 static float upper_visibility_threshold = 0.9f;
 
@@ -202,8 +212,8 @@ void initialize_planes(void)
     initialize_uniform(&brick_offset_uniform, "brick_offset");
     initialize_uniform(&brick_extent_uniform, "brick_extent");
     initialize_uniform(&pad_fractions_uniform, "pad_fractions");
-    initialize_uniform(&subbrick_offset_uniform, "subbrick_offset");
-    initialize_uniform(&subbrick_extent_uniform, "subbrick_extent");
+    initialize_uniform(&subbrick_offset_uniform, "sub_brick_offset");
+    initialize_uniform(&subbrick_extent_uniform, "sub_brick_extent");
 
     initialize_uniform(&back_plane_dist_uniform, "back_plane_dist");
     initialize_uniform(&back_corner_idx_uniform, "back_corner_idx");
@@ -322,6 +332,26 @@ float get_plane_separation(void)
     return plane_separation.current_multiplier;
 }
 
+size_t get_vertex_position_variable_number(void)
+{
+    return position_variable_number;
+}
+
+const Vector3f* get_unit_axis_aligned_box_corners(void)
+{
+    return corners;
+}
+
+unsigned int get_axis_aligned_box_back_corner_for_plane(const Vector3f* plane_normal)
+{
+    return back_corners[plane_normal->a[0] < 0][plane_normal->a[1] < 0][plane_normal->a[2] < 0];
+}
+
+unsigned int get_axis_aligned_box_front_corner_for_plane(const Vector3f* plane_normal)
+{
+    return front_corners[plane_normal->a[0] < 0][plane_normal->a[1] < 0][plane_normal->a[2] < 0];
+}
+
 void draw_active_bricked_field()
 {
     const BrickedField* const bricked_field = active_bricked_field.bricked_field;
@@ -333,22 +363,7 @@ void draw_active_bricked_field()
     active_bricked_field.current_look_axis = get_camera_look_axis();
     active_bricked_field.current_camera_position = get_camera_position();
 
-    unsigned int corner_idx;
-    float dist;
-    float min_dist = FLT_MAX;
-
-    // Compute index of the back corner (could also be done with a lookup table)
-    for (corner_idx = 0; corner_idx < 8; corner_idx++)
-    {
-        dist = dot3f(corners + corner_idx, active_bricked_field.current_look_axis);
-
-        if (dist < min_dist)
-        {
-            min_dist = dist;
-            active_bricked_field.current_back_corner_idx = corner_idx;
-        }
-    }
-
+    active_bricked_field.current_back_corner_idx = get_axis_aligned_box_back_corner_for_plane(active_bricked_field.current_look_axis);
     active_bricked_field.current_front_corner_idx = opposite_corners[active_bricked_field.current_back_corner_idx];
 
     BrickTreeNode* node = bricked_field->tree;
@@ -555,8 +570,8 @@ static void generate_shader_code_for_planes(void)
     const char* brick_offset_name = brick_offset_uniform.name.chars;
     const char* brick_extent_name = brick_extent_uniform.name.chars;
     const char* pad_fractions_name = pad_fractions_uniform.name.chars;
-    const char* subbrick_offset_name = subbrick_offset_uniform.name.chars;
-    const char* subbrick_extent_name = subbrick_extent_uniform.name.chars;
+    const char* sub_brick_offset_name = subbrick_offset_uniform.name.chars;
+    const char* sub_brick_extent_name = subbrick_extent_uniform.name.chars;
 
     const char* back_plane_dist_name = back_plane_dist_uniform.name.chars;
     const char* back_corner_idx_name = back_corner_idx_uniform.name.chars;
@@ -564,6 +579,8 @@ static void generate_shader_code_for_planes(void)
     const char* orientation_name = orientation_uniform.name.chars;
 
     const char* sampling_correction_name = sampling_correction_uniform.name.chars;
+
+    const char* look_axis_name = get_camera_look_axis_name();
 
     add_vertex_input_in_shader(&active_shader_program->vertex_shader_source, "uint", vertex_idx_name, 0);
     add_vertex_input_in_shader(&active_shader_program->vertex_shader_source, "uint", plane_idx_name, 1);
@@ -579,8 +596,8 @@ static void generate_shader_code_for_planes(void)
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", brick_offset_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", brick_extent_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", pad_fractions_name);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", subbrick_offset_name);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", subbrick_extent_name);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", sub_brick_offset_name);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", sub_brick_extent_name);
 
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "float", back_plane_dist_name);
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "uint", back_corner_idx_name);
@@ -588,23 +605,23 @@ static void generate_shader_code_for_planes(void)
     add_uniform_in_shader(&active_shader_program->vertex_shader_source, "uint", orientation_name);
 
     DynamicString position_code = create_string(
-      "    float plane_dist = back_plane_dist + plane_idx*plane_separation;"
+      "    float plane_dist = %s + %s*%s;"
     "\n"
     "\n    vec4 position;"
     "\n"
     "\n    for (uint edge_idx = 0; edge_idx < 4; edge_idx++)"
     "\n    {"
-    "\n        uint edge_start_idx = edge_starts[4*vertex_idx + edge_idx];"
-    "\n        uint edge_end_idx   =   edge_ends[4*vertex_idx + edge_idx];"
+    "\n        uint edge_start_idx = %s[4*vertex_idx + edge_idx];"
+    "\n        uint edge_end_idx   =   %s[4*vertex_idx + edge_idx];"
     "\n"
-    "\n        vec3 edge_start = subbrick_extent*corners[corner_permutations[8*back_corner_idx + edge_start_idx]];"
-    "\n        vec3 edge_end   = subbrick_extent*corners[corner_permutations[8*back_corner_idx + edge_end_idx]];"
+    "\n        vec3 edge_start = %s*%s[%s[8*%s + edge_start_idx]];"
+    "\n        vec3 edge_end   = %s*%s[%s[8*%s + edge_end_idx]];"
     "\n"
-    "\n        vec3 edge_origin = edge_start + subbrick_offset;"
+    "\n        vec3 edge_origin = edge_start + %s;"
     "\n        vec3 edge_vector = edge_end - edge_start;"
     "\n"
-    "\n        float denom = dot(edge_vector, look_axis);"
-    "\n        float lambda = (denom != 0.0) ? (plane_dist - dot(edge_origin, look_axis))/denom : -1.0;"
+    "\n        float denom = dot(edge_vector, %s);"
+    "\n        float lambda = (denom != 0.0) ? (plane_dist - dot(edge_origin, %s))/denom : -1.0;"
     "\n"
     "\n        if (lambda >= 0.0 && lambda <= 1.0)"
     "\n        {"
@@ -612,8 +629,14 @@ static void generate_shader_code_for_planes(void)
     "\n            position.w = 1.0;"
     "\n            break;"
     "\n        }"
-    "\n    }"
-    );
+    "\n    }",
+    back_plane_dist_name, plane_idx_name, plane_separation_name,
+    edge_starts_name, edge_ends_name,
+    sub_brick_extent_name, corners_name, corner_permutations_name, back_corner_idx_name,
+    sub_brick_extent_name, corners_name, corner_permutations_name, back_corner_idx_name,
+    sub_brick_offset_name,
+    look_axis_name,
+    look_axis_name);
 
     LinkedList global_dependencies = create_list();
     append_string_to_list(&global_dependencies, vertex_idx_name);
@@ -623,15 +646,15 @@ static void generate_shader_code_for_planes(void)
     append_string_to_list(&global_dependencies, corner_permutations_name);
     append_string_to_list(&global_dependencies, edge_starts_name);
     append_string_to_list(&global_dependencies, edge_ends_name);
-    append_string_to_list(&global_dependencies, subbrick_offset_name);
-    append_string_to_list(&global_dependencies, subbrick_extent_name);
+    append_string_to_list(&global_dependencies, sub_brick_offset_name);
+    append_string_to_list(&global_dependencies, sub_brick_extent_name);
     append_string_to_list(&global_dependencies, back_plane_dist_name);
     append_string_to_list(&global_dependencies, back_corner_idx_name);
-    append_string_to_list(&global_dependencies, get_camera_look_axis_name());
+    append_string_to_list(&global_dependencies, look_axis_name);
 
-    const size_t position_variable_number = add_snippet_in_shader(&active_shader_program->vertex_shader_source,
-                                                                  "vec4", "position", position_code.chars,
-                                                                  &global_dependencies, NULL);
+    position_variable_number = add_variable_snippet_in_shader(&active_shader_program->vertex_shader_source,
+                                                              "vec4", "position", position_code.chars,
+                                                              &global_dependencies, NULL);
 
     clear_list(&global_dependencies);
     clear_string(&position_code);
@@ -642,14 +665,17 @@ static void generate_shader_code_for_planes(void)
 
     DynamicString tex_coord_code = create_string(
     "\n    vec3 tex_coord;"
-    "\n    vec3 position_within_brick = (variable_%d.xyz - brick_offset)/brick_extent;"
-    "\n    vec3 scale = vec3(1.0) - 2.0*pad_fractions;"
+    "\n    vec3 position_within_brick = (variable_%d.xyz - %s)/%s;"
+    "\n    vec3 scale = vec3(1.0) - 2.0*%s;"
     "\n    for (uint component = 0; component < 3; component++)"
     "\n    {"
-    "\n        uint permuted_component = orientation_permutations[3*orientation + component];"
-    "\n        tex_coord[component] = scale[permuted_component]*position_within_brick[permuted_component] + pad_fractions[permuted_component];"
+    "\n        uint permuted_component = %s[3*%s + component];"
+    "\n        tex_coord[component] = scale[permuted_component]*position_within_brick[permuted_component] + %s[permuted_component];"
     "\n    }",
-    position_variable_number);
+    position_variable_number, brick_offset_name, brick_extent_name,
+    pad_fractions_name,
+    orientation_permutations_name, orientation_name,
+    pad_fractions_name);
 
     global_dependencies = create_list();
     append_string_to_list(&global_dependencies, brick_offset_name);
@@ -661,9 +687,9 @@ static void generate_shader_code_for_planes(void)
     LinkedList tex_coord_variable_dependencies = create_list();
     append_size_t_to_list(&tex_coord_variable_dependencies, position_variable_number);
 
-    const size_t tex_coord_variable_number = add_snippet_in_shader(&active_shader_program->vertex_shader_source,
-                                                                   "vec3", "tex_coord", tex_coord_code.chars,
-                                                                   &global_dependencies, &tex_coord_variable_dependencies);
+    tex_coord_variable_number = add_variable_snippet_in_shader(&active_shader_program->vertex_shader_source,
+                                                               "vec3", "tex_coord", tex_coord_code.chars,
+                                                               &global_dependencies, &tex_coord_variable_dependencies);
 
     clear_list(&global_dependencies);
     clear_list(&tex_coord_variable_dependencies);
@@ -693,6 +719,10 @@ static void draw_brick_tree_nodes(const BrickTreeNode* node)
         assert(node->lower_child);
         assert(node->upper_child);
 
+        // Bricks that are completely clipped away do not have to be drawn
+        const int lower_is_clipped = axis_aligned_box_in_clipped_region(&node->lower_child->spatial_offset, &node->lower_child->spatial_extent);
+        const int upper_is_clipped = axis_aligned_box_in_clipped_region(&node->upper_child->spatial_offset, &node->upper_child->spatial_extent);
+
         // In order to determine whether the upper or lower child should be drawn first,
         // we can compute the vector going from the a point on the plane separating the
         // children to the camera. If the dot product between this vector and the normal
@@ -703,13 +733,19 @@ static void draw_brick_tree_nodes(const BrickTreeNode* node)
 
         if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
         {
-            draw_brick_tree_nodes(node->lower_child);
-            draw_brick_tree_nodes(node->upper_child);
+            if (!lower_is_clipped)
+                draw_brick_tree_nodes(node->lower_child);
+
+            if (!upper_is_clipped)
+                draw_brick_tree_nodes(node->upper_child);
         }
         else
         {
-            draw_brick_tree_nodes(node->upper_child);
-            draw_brick_tree_nodes(node->lower_child);
+            if (!upper_is_clipped)
+                draw_brick_tree_nodes(node->upper_child);
+
+            if (!lower_is_clipped)
+                draw_brick_tree_nodes(node->lower_child);
         }
     }
 }
@@ -761,16 +797,26 @@ static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
         {
             assert(node->upper_child);
 
+            // Sub bricks that are completely clipped away do not have to be drawn
+            const int lower_is_clipped = axis_aligned_box_in_clipped_region(&node->lower_child->spatial_offset, &node->lower_child->spatial_extent);
+            const int upper_is_clipped = axis_aligned_box_in_clipped_region(&node->upper_child->spatial_offset, &node->upper_child->spatial_extent);
+
             // Make sure to draw the children in the correct order (back to front)
             if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
             {
-                draw_sub_brick_tree_nodes(node->lower_child);
-                draw_sub_brick_tree_nodes(node->upper_child);
+                if (!lower_is_clipped)
+                    draw_sub_brick_tree_nodes(node->lower_child);
+
+                if (!upper_is_clipped)
+                    draw_sub_brick_tree_nodes(node->upper_child);
             }
             else
             {
-                draw_sub_brick_tree_nodes(node->upper_child);
-                draw_sub_brick_tree_nodes(node->lower_child);
+                if (!upper_is_clipped)
+                    draw_sub_brick_tree_nodes(node->upper_child);
+
+                if (!lower_is_clipped)
+                    draw_sub_brick_tree_nodes(node->lower_child);
             }
         }
         else
