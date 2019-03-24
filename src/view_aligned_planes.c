@@ -29,7 +29,6 @@ typedef struct PlaneVertex
 {
     GLuint vertex_idx;
     GLuint plane_idx;
-    Vector3f position;
 } PlaneVertex;
 
 typedef struct PlaneVertices
@@ -120,6 +119,15 @@ static Vector3f corners[8] = {{{0, 0, 0}},  //   /|         /|
                               {{1, 1, 0}},  // | /        | /
                               {{0, 1, 1}},  // |/         |/
                               {{1, 1, 1}}}; // 3----------4
+
+static Vector3f centered_corners[8] = {{{-1, -1, -1}},
+                                       {{ 1, -1, -1}},
+                                       {{-1,  1, -1}},
+                                       {{-1, -1,  1}},
+                                       {{ 1, -1,  1}},
+                                       {{ 1,  1, -1}},
+                                       {{-1,  1,  1}},
+                                       {{ 1,  1,  1}}};
 
 static const unsigned int back_corners[2][2][2] = {{{0, 3}, {2, 6}},
                                                    {{1, 4}, {5, 7}}};
@@ -342,6 +350,11 @@ const Vector3f* get_unit_axis_aligned_box_corners(void)
     return corners;
 }
 
+const Vector3f* get_centered_unit_axis_aligned_box_corners(void)
+{
+    return centered_corners;
+}
+
 unsigned int get_axis_aligned_box_back_corner_for_plane(const Vector3f* plane_normal)
 {
     return back_corners[plane_normal->a[0] < 0][plane_normal->a[1] < 0][plane_normal->a[2] < 0];
@@ -490,7 +503,6 @@ static void update_plane_buffer_data(void)
         {
             plane_vertices[j].vertex_idx = j;
             plane_vertices[j].plane_idx = i;
-            set_vector3f_elements(&plane_vertices[j].position, 0, 0, 0);
         }
 
         offset = 6*i;
@@ -538,11 +550,6 @@ static void update_vertex_array_object(void)
     glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, sizeof(PlaneVertex), (GLvoid*)sizeof(GLuint));
     glEnableVertexAttribArray(1);
     abort_on_GL_error("Could not set VAO plane index attributes");
-
-    // Specify vertex attribute pointer for vertex positions
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (GLvoid*)(2*sizeof(GLuint)));
-    glEnableVertexAttribArray(2);
-    abort_on_GL_error("Could not set VAO vertex position attributes");
 
     // Store buffer of all face indices on device
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, plane_stack.face_buffer_id);

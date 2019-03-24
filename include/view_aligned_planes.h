@@ -21,6 +21,7 @@ float get_plane_separation(void);
 size_t get_vertex_position_variable_number(void);
 
 const Vector3f* get_unit_axis_aligned_box_corners(void);
+const Vector3f* get_centered_unit_axis_aligned_box_corners(void);
 unsigned int get_axis_aligned_box_back_corner_for_plane(const Vector3f* plane_normal);
 unsigned int get_axis_aligned_box_front_corner_for_plane(const Vector3f* plane_normal);
 
