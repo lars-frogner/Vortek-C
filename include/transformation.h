@@ -44,6 +44,14 @@ const Vector3f* get_camera_position(void);
 float get_model_scale(unsigned int axis);
 float get_component_of_vector_from_model_point_to_camera(const Vector3f* point, unsigned int component);
 
+void enable_camera_control(void);
+void disable_camera_control(void);
+
+void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
+void camera_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
+void camera_control_drag_end_callback(void);
+void camera_control_scroll_callback(double scroll_rate);
+
 void cleanup_transformation(void);
 
 #endif

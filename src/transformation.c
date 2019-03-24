@@ -3,7 +3,12 @@
 #include "gl_includes.h"
 #include "error.h"
 #include "dynamic_string.h"
+#include "trackball.h"
+#include "view_aligned_planes.h"
 
+#include <math.h>
+
+enum controller_state {NO_CONTROL, CONTROL};
 
 typedef struct ProjectionTransformation
 {
@@ -35,6 +40,16 @@ typedef struct Camera
     int needs_update;
 } Camera;
 
+typedef struct CameraController
+{
+    Trackball trackball;
+    float zoom_rate_modifier;
+    float plane_separation_modifier;
+    float current_plane_separation;
+    enum controller_state state;
+    int is_dragging;
+} CameraController;
+
 
 static void generate_shader_code_for_transformation(void);
 static void update_projection_matrix(void);
@@ -43,6 +58,7 @@ static void sync_transformation(void);
 
 static Transformation transformation;
 static Camera camera;
+static CameraController camera_controller;
 
 static ShaderProgram* active_shader_program = NULL;
 
@@ -67,6 +83,12 @@ void initialize_transformation(void)
 
     initialize_uniform(&transformation.uniform, "MVP_matrix");
     initialize_uniform(&camera.look_axis_uniform, "look_axis");
+
+    initialize_trackball(&camera_controller.trackball);
+    camera_controller.zoom_rate_modifier = 1e-2f;
+    camera_controller.plane_separation_modifier = 2.0f;
+    camera_controller.state = CONTROL;
+    camera_controller.is_dragging = 0;
 
     generate_shader_code_for_transformation();
 }
@@ -177,13 +199,6 @@ void cleanup_transformation(void)
     destroy_uniform(&camera.look_axis_uniform);
 }
 
-static void generate_shader_code_for_transformation(void)
-{
-    check(active_shader_program);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "mat4", transformation.uniform.name.chars);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", camera.look_axis_uniform.name.chars);
-}
-
 const char* get_transformation_name(void)
 {
     return transformation.uniform.name.chars;
@@ -246,6 +261,66 @@ float get_component_of_vector_from_model_point_to_camera(const Vector3f* point, 
     assert(component < 3);
     return (transformation.projection.type == PERSPECTIVE_PROJECTION) ?
         camera.position.a[component] - point->a[component]*get_model_scale(component) : camera.look_axis.a[component];
+}
+
+void enable_camera_control(void)
+{
+    camera_controller.state = CONTROL;
+}
+
+void disable_camera_control(void)
+{
+    camera_controller.state = NO_CONTROL;
+}
+
+void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+{
+    if (camera_controller.state == CONTROL)
+    {
+        activate_trackball(&camera_controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+
+        camera_controller.current_plane_separation = get_plane_separation();
+        set_plane_separation(camera_controller.current_plane_separation*camera_controller.plane_separation_modifier);
+
+        camera_controller.is_dragging = 1;
+    }
+}
+
+void camera_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+{
+    if (camera_controller.state == CONTROL && camera_controller.is_dragging)
+    {
+        drag_trackball(&camera_controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+
+        apply_origin_centered_view_rotation_about_axis(&camera_controller.trackball.current_rotation_axis,
+                                                       camera_controller.trackball.current_rotation_angle);
+    }
+}
+
+void camera_control_drag_end_callback(void)
+{
+    if (camera_controller.is_dragging)
+    {
+        set_plane_separation(camera_controller.current_plane_separation);
+        camera_controller.is_dragging = 0;
+    }
+}
+
+void camera_control_scroll_callback(double scroll_rate)
+{
+    if (camera_controller.state == CONTROL)
+    {
+        const double scale = exp(camera_controller.zoom_rate_modifier*scroll_rate);
+        scale_trackball(&camera_controller.trackball, scale);
+        apply_model_scaling((float)scale);
+    }
+}
+
+static void generate_shader_code_for_transformation(void)
+{
+    check(active_shader_program);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "mat4", transformation.uniform.name.chars);
+    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", camera.look_axis_uniform.name.chars);
 }
 
 static void update_projection_matrix(void)

@@ -2,87 +2,77 @@
 
 #include "error.h"
 #include "extra_math.h"
-#include "geometry.h"
-#include "transformation.h"
-#include "view_aligned_planes.h"
-#include "renderer.h"
 
 #include <math.h>
 
 
-static Vector3 compute_trackball_point(double x, double y);
-static double compute_trackball_pick_depth(double x, double y);
+static void compute_trackball_point(const Trackball* trackball, Vector3* point, double x, double y);
+static double compute_trackball_pick_depth(const Trackball* trackball, double x, double y);
 static void screen_coords_to_trackball_coords(double screen_coord_x, double screen_coord_y,
                                               int screen_width, int screen_height,
                                               double* x, double* y);
 
 
-static const double zoom_rate_modifier = 1e-2;
-static const float plane_separation_modifier = 2.0f;
-
-static double trackball_radius = 1.0;
-
-static Vector3 previous_trackball_point = {{0}};
-
-static float current_plane_separation;
-
-
-void trackball_leftclick_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void initialize_trackball(Trackball* trackball)
 {
-    assert(screen_width > 0);
-    assert(screen_height > 0);
-
-    double x, y;
-    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
-    previous_trackball_point = compute_trackball_point(x, y);
-
-    current_plane_separation = get_plane_separation();
-    set_plane_separation(current_plane_separation*plane_separation_modifier);
+    assert(trackball);
+    trackball->radius = 1.0;
+    set_vector3_elements(&trackball->previous_activation_point, 0, 0, 0);
+    set_vector3f_elements(&trackball->current_rotation_axis, 0, 0, 0);
+    trackball->current_rotation_angle = 0;
 }
 
-void trackball_mouse_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void activate_trackball(Trackball* trackball, double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
 {
+    assert(trackball);
     assert(screen_width > 0);
     assert(screen_height > 0);
 
     double x, y;
     screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
-    const Vector3 current_trackball_point = compute_trackball_point(x, y);
+    compute_trackball_point(trackball, &trackball->previous_activation_point, x, y);
+}
 
-    Vector3 rotation_axis = cross3(&previous_trackball_point, &current_trackball_point);
+void drag_trackball(Trackball* trackball, double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+{
+    assert(trackball);
+    assert(screen_width > 0);
+    assert(screen_height > 0);
+
+    double x, y;
+    screen_coords_to_trackball_coords(screen_coord_x, screen_coord_y, screen_width, screen_height, &x, &y);
+    Vector3 current_activation_point;
+    compute_trackball_point(trackball, &current_activation_point, x, y);
+
+    Vector3 rotation_axis = cross3(&trackball->previous_activation_point, &current_activation_point);
     normalize_vector3(&rotation_axis);
-    const Vector3f rotation_axisf = vector3_to_vector3f(&rotation_axis);
+    copy_vector3_to_vector3f(&rotation_axis, &trackball->current_rotation_axis);
 
-    const float rotation_angle = (float)acos(dot3(&previous_trackball_point, &current_trackball_point));
+    trackball->current_rotation_angle = (float)acos(dot3(&trackball->previous_activation_point, &current_activation_point));
 
-    apply_origin_centered_view_rotation_about_axis(&rotation_axisf, rotation_angle);
-
-    previous_trackball_point = current_trackball_point;
+    copy_vector3(&current_activation_point, &trackball->previous_activation_point);
 }
 
-void trackball_leftrelease_callback(void)
+void scale_trackball(Trackball* trackball, double scale)
 {
-    set_plane_separation(current_plane_separation);
+    assert(trackball);
+    trackball->radius *= scale;
 }
 
-void trackball_zoom_callback(double zoom_rate)
+static void compute_trackball_point(const Trackball* trackball, Vector3* point, double x, double y)
 {
-    const float scale = (float)exp(zoom_rate_modifier*zoom_rate);
-    trackball_radius *= scale;
-    apply_model_scaling(scale);
+    assert(trackball);
+    assert(point);
+    set_vector3_elements(point, x, y, compute_trackball_pick_depth(trackball, x, y));
+    normalize_vector3(point);
 }
 
-static Vector3 compute_trackball_point(double x, double y)
+static double compute_trackball_pick_depth(const Trackball* trackball, double x, double y)
 {
-    Vector3 point = {{x, y, compute_trackball_pick_depth(x, y)}};
-    normalize_vector3(&point);
-    return point;
-}
+    assert(trackball);
 
-static double compute_trackball_pick_depth(double x, double y)
-{
     const double squared_2D_radius = x*x + y*y;
-    const double squared_trackball_radius = trackball_radius*trackball_radius;
+    const double squared_trackball_radius = trackball->radius*trackball->radius;
     const double squared_2D_radius_limit = 0.5*squared_trackball_radius;
     double z;
 
