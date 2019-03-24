@@ -106,6 +106,10 @@ Field* get_field(const char* name)
     check(name);
 
     MapItem item = get_map_item(&fields, name);
+
+    if (!item.data)
+        print_severe_message("Could not get field \"%s\" because it doesn't exist.", name);
+
     assert(item.size == sizeof(Field));
     Field* const field = (Field*)item.data;
     check(field);
@@ -138,6 +142,9 @@ static Field* create_field(const char* name,
 {
     check(name);
     check(data);
+
+    if (map_has_key(&fields, name))
+        print_severe_message("Cannot create field \"%s\" because a field with this name already exists.", name);
 
     MapItem item = insert_new_map_item(&fields, name, sizeof(Field));
     Field* const field = (Field*)item.data;
