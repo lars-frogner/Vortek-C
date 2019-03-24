@@ -13,6 +13,7 @@ typedef struct DynamicString
 
 DynamicString create_empty_string(void);
 DynamicString create_duplicate_string(const DynamicString* source_string);
+void copy_string_attributes(const DynamicString* source, DynamicString* destination);
 DynamicString create_string(const char* chars, ...);
 DynamicString create_string_from_arg_list(const char* chars, va_list args);
 

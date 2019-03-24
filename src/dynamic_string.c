@@ -31,6 +31,15 @@ DynamicString create_duplicate_string(const DynamicString* source_string)
     return destination_string;
 }
 
+void copy_string_attributes(const DynamicString* source, DynamicString* destination)
+{
+    check(source);
+    check(destination);
+    destination->chars = source->chars;
+    destination->size = source->size;
+    destination->length = source->length;
+}
+
 DynamicString create_string(const char* chars, ...)
 {
     check(chars);
