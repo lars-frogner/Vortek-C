@@ -162,11 +162,31 @@ void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w)
     v->a[3] = w;
 }
 
-void copy_vector3f(const Vector3f* source, Vector3f* destination)
+void copy_vector3(const Vector3* source, Vector3* destination)
 {
+    assert(source);
+    assert(destination);
     destination->a[0] = source->a[0];
     destination->a[1] = source->a[1];
     destination->a[2] = source->a[2];
+}
+
+void copy_vector3f(const Vector3f* source, Vector3f* destination)
+{
+    assert(source);
+    assert(destination);
+    destination->a[0] = source->a[0];
+    destination->a[1] = source->a[1];
+    destination->a[2] = source->a[2];
+}
+
+void copy_vector3_to_vector3f(const Vector3* source, Vector3f* destination)
+{
+    assert(source);
+    assert(destination);
+    destination->a[0] = (float)source->a[0];
+    destination->a[1] = (float)source->a[1];
+    destination->a[2] = (float)source->a[2];
 }
 
 int equal_vector3f(const Vector3f* v1, const Vector3f* v2)
@@ -548,6 +568,14 @@ void normalize_vector3f(Vector3f* v)
     v->a[2] *= scale;
 }
 
+void invert_vector3f(Vector3f* v)
+{
+    assert(v);
+    v->a[0] = -v->a[0];
+    v->a[1] = -v->a[1];
+    v->a[2] = -v->a[2];
+}
+
 void get_matrix4f_first_column_vector3f(const Matrix4f* m, Vector3f* column_vector)
 {
     assert(m);
@@ -894,4 +922,14 @@ void set_transform_translation(Matrix4f* m, float dx, float dy, float dz)
     m->a[ 3] = dx;
     m->a[ 7] = dy;
     m->a[11] = dz;
+}
+
+void rotate_vector3f_about_axis(Vector3f* vector, const Vector3f* axis, float angle)
+{
+    assert(vector);
+    assert(axis);
+
+    const Matrix4f rotation_matrix = create_rotation_about_axis_transform(axis, angle);
+    const Vector3f rotated_vector = multiply_matrix4f_vector3f(&rotation_matrix, vector);
+    copy_vector3f(&rotated_vector, vector);
 }

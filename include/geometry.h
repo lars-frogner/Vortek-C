@@ -55,7 +55,9 @@ void set_vector3_elements(Vector3* v, double x, double y, double z);
 void set_vector3f_elements(Vector3f* v, float x, float y, float z);
 void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w);
 
+void copy_vector3(const Vector3* source, Vector3* destination);
 void copy_vector3f(const Vector3f* source, Vector3f* destination);
+void copy_vector3_to_vector3f(const Vector3* source, Vector3f* destination);
 
 int equal_vector3f(const Vector3f* v1, const Vector3f* v2);
 
@@ -80,6 +82,8 @@ Vector3f cross3f(const Vector3f* v1, const Vector3f* v2);
 
 void normalize_vector3(Vector3* v);
 void normalize_vector3f(Vector3f* v);
+
+void invert_vector3f(Vector3f* v);
 
 void get_matrix4f_first_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
 void get_matrix4f_second_column_vector3f(const Matrix4f* m, Vector3f* column_vector);
@@ -114,5 +118,7 @@ void apply_rotation_about_z(Matrix4f* m, float angle);
 void apply_rotation_about_axis(Matrix4f* m, const Vector3f* axis, float angle);
 
 void set_transform_translation(Matrix4f* m, float dx, float dy, float dz);
+
+void rotate_vector3f_about_axis(Vector3f* vector, const Vector3f* axis, float angle);
 
 #endif
