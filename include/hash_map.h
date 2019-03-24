@@ -26,6 +26,8 @@ HashMap create_map(void);
 MapItem insert_new_map_item(HashMap* map, const char* key, size_t item_size);
 MapItem get_map_item(const HashMap* map, const char* key);
 
+int map_has_key(const HashMap* map, const char* key);
+
 void remove_map_item(HashMap* map, const char* key);
 void clear_map(HashMap* map);
 void destroy_map(HashMap* map);

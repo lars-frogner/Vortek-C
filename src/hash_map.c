@@ -113,6 +113,14 @@ MapItem get_map_item(const HashMap* map, const char* key)
     }
 }
 
+int map_has_key(const HashMap* map, const char* key)
+{
+    check(map);
+    check(key);
+    const long location = find_key_location(map, key);
+    return location != -1;
+}
+
 void remove_map_item(HashMap* map, const char* key)
 {
     check(map);
