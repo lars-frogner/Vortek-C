@@ -40,6 +40,7 @@ size_t add_variable_snippet_in_shader(ShaderSource* source, const char* output_t
                                       const char* snippet, LinkedList* global_dependencies, LinkedList* variable_dependencies);
 
 void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_number, const char* output_name);
+void assign_transformed_input_to_output_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name, const char* output_name);
 void assign_transformed_variable_to_output_in_shader(ShaderSource* source, const char* matrix_name, size_t variable_number, const char* output_name);
 void assign_variable_to_new_output_in_shader(ShaderSource* source, const char* type, size_t variable_number, const char* output_name);
 void assign_input_to_new_output_in_shader(ShaderSource* source, const char* type, const char* input_name, const char* output_name);

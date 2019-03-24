@@ -261,6 +261,23 @@ void assign_variable_to_output_in_shader(ShaderSource* source, size_t variable_n
     append_size_t_to_list(&source->output_variables, variable_number);
 }
 
+void assign_transformed_input_to_output_in_shader(ShaderSource* source, const char* matrix_name, const char* input_name, const char* output_name)
+{
+    check(source);
+    check(matrix_name);
+    check(input_name);
+    check(output_name);
+
+    Variable* const variable = create_variable(source);
+
+    set_string(&variable->expression, "    %s = %s*%s;\n", output_name, matrix_name, input_name);
+
+    add_global_dependency(variable, matrix_name);
+    add_global_dependency(variable, input_name);
+
+    append_size_t_to_list(&source->output_variables, variable->number);
+}
+
 void assign_transformed_variable_to_output_in_shader(ShaderSource* source, const char* matrix_name, size_t variable_number, const char* output_name)
 {
     check(source);
