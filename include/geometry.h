@@ -58,6 +58,7 @@ void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w);
 void copy_vector3(const Vector3* source, Vector3* destination);
 void copy_vector3f(const Vector3f* source, Vector3f* destination);
 void copy_vector3_to_vector3f(const Vector3* source, Vector3f* destination);
+void copy_vector3f_to_vector4f(const Vector3f* source, Vector4f* destination);
 
 int equal_vector3f(const Vector3f* v1, const Vector3f* v2);
 
