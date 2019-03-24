@@ -1,32 +1,52 @@
 #include "clip_planes.h"
 
 #include "error.h"
+#include "extra_math.h"
 #include "linked_list.h"
+#include "trackball.h"
 #include "shader_generator.h"
 #include "view_aligned_planes.h"
 
+#include <math.h>
 
-#define MAX_CLIP_PLANES 3
+
+#define MAX_CLIP_PLANES 6
 
 
-typedef struct ClipPlanes
+enum controller_state {NO_CONTROL, CONTROL};
+enum plane_controllability {SHIFT_CONTROL, FULL_CONTROL};
+
+typedef struct ClipPlane
 {
-    unsigned int active_count;
-    Vector3f origins[MAX_CLIP_PLANES];
-    Vector3f normals[MAX_CLIP_PLANES];
-    float origin_distances[MAX_CLIP_PLANES];
-    unsigned int axis_aligned_box_front_corners[MAX_CLIP_PLANES];
-    Uniform active_count_uniform;
-    Uniform origin_distances_uniform;
-    Uniform normals_uniform;
-} ClipPlanes;
+    Vector3f normal;
+    float origin_shift;
+    unsigned int axis_aligned_box_front_corner;
+    enum clip_plane_state state;
+    enum plane_controllability controllability;
+    Uniform normal_uniform;
+    Uniform origin_shift_uniform;
+} ClipPlane;
+
+typedef struct ClipPlaneController
+{
+    Trackball trackball;
+    float origin_shift_rate_modifier;
+    float max_abs_origin_shift;
+    unsigned int controllable_clip_plane_idx;
+    enum controller_state state;
+} ClipPlaneController;
 
 
 static void generate_shader_code_for_clip_planes(void);
-static void sync_clip_planes(void);
+static void sync_clip_plane(unsigned int idx);
 
 
-static ClipPlanes clip_planes;
+static ClipPlane clip_planes[MAX_CLIP_PLANES];
+
+static Vector3f disabled_normal;
+static float disabled_origin_shift;
+
+static ClipPlaneController controller;
 
 static ShaderProgram* active_shader_program = NULL;
 
@@ -38,14 +58,23 @@ void set_active_shader_program_for_clip_planes(ShaderProgram* shader_program)
 
 void initialize_clip_planes(void)
 {
-    for (unsigned int plane_idx = 0; plane_idx < MAX_CLIP_PLANES; plane_idx++)
-        glEnable(GL_CLIP_DISTANCE0 + plane_idx);
+    for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
+    {
+        glEnable(GL_CLIP_DISTANCE0 + idx);
+        clip_planes[idx].state = CLIP_PLANE_DISABLED;
+        clip_planes[idx].controllability = (idx < 3) ? SHIFT_CONTROL : FULL_CONTROL;
+        initialize_uniform(&clip_planes[idx].normal_uniform, "clip_plane_normals[%d]", idx);
+        initialize_uniform(&clip_planes[idx].origin_shift_uniform, "clip_plane_origin_shifts[%d]", idx);
+    }
 
-    clip_planes.active_count = 0;
+    set_vector3f_elements(&disabled_normal, 0, 0, 0);
+    disabled_origin_shift = -1.0f;
 
-    initialize_uniform(&clip_planes.active_count_uniform, "active_clip_plane_count");
-    initialize_uniform(&clip_planes.normals_uniform, "clip_plane_normals");
-    initialize_uniform(&clip_planes.origin_distances_uniform, "clip_plane_origin_distances");
+    initialize_trackball(&controller.trackball);
+    controller.origin_shift_rate_modifier = 5e-3f;
+    controller.max_abs_origin_shift = sqrtf(3.0f);
+    controller.controllable_clip_plane_idx = 0;
+    controller.state = NO_CONTROL;
 
     generate_shader_code_for_clip_planes();
 }
@@ -54,61 +83,148 @@ void load_clip_planes(void)
 {
     check(active_shader_program);
 
-    load_uniform(active_shader_program, &clip_planes.active_count_uniform);
-    load_uniform(active_shader_program, &clip_planes.normals_uniform);
-    load_uniform(active_shader_program, &clip_planes.origin_distances_uniform);
-
-    reset_clip_planes();
-
-    clip_planes.active_count_uniform.needs_update = 1;
-    sync_clip_planes();
+    for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
+    {
+        load_uniform(active_shader_program, &clip_planes[idx].normal_uniform);
+        load_uniform(active_shader_program, &clip_planes[idx].origin_shift_uniform);
+        reset_clip_plane(idx);
+    }
 }
 
-void reset_clip_planes(void)
+void set_clip_plane_state(unsigned int idx, enum clip_plane_state state)
 {
-    unsigned int plane_idx;
+    check(idx < MAX_CLIP_PLANES);
 
-    for (plane_idx = 0; plane_idx < MAX_CLIP_PLANES; plane_idx++)
-        set_vector3f_elements(clip_planes.origins + plane_idx, 0, 0, 0);
+    const enum clip_plane_state previous_state = clip_planes[idx].state;
+    clip_planes[idx].state = state;
 
-    set_vector3f_elements(clip_planes.normals + 0, -1.0f, 0, 0);
-    set_vector3f_elements(clip_planes.normals + 1, 0, -1.0f, 0);
-    set_vector3f_elements(clip_planes.normals + 2, 0, 0, -1.0f);
+    if (controller.controllable_clip_plane_idx == idx && state == CLIP_PLANE_DISABLED)
+    {
+        controller.controllable_clip_plane_idx = 0;
+        disable_clip_plane_control();
+    }
 
-    for (plane_idx = 3; plane_idx < MAX_CLIP_PLANES; plane_idx++)
-        set_vector3f_elements(clip_planes.normals + plane_idx, 0, 0, 0);
+    if (state != previous_state)
+        sync_clip_plane(idx);
+}
 
-    for (plane_idx = 0; plane_idx < MAX_CLIP_PLANES; plane_idx++)
-        clip_planes.origin_distances[plane_idx] = dot3f(clip_planes.origins + plane_idx, clip_planes.normals + plane_idx);
+void toggle_clip_plane_enabled_state(unsigned int idx)
+{
+    check(idx < MAX_CLIP_PLANES);
 
-    glUseProgram(active_shader_program->id);
-    abort_on_GL_error("Could not use shader program for updating clip plane uniforms");
+    if (clip_planes[idx].state == CLIP_PLANE_DISABLED)
+    {
+        clip_planes[idx].state = CLIP_PLANE_ENABLED;
+    }
+    else
+    {
+        clip_planes[idx].state = CLIP_PLANE_DISABLED;
 
-    glUniform3fv(clip_planes.normals_uniform.location, MAX_CLIP_PLANES, (const GLfloat*)clip_planes.normals);
-    abort_on_GL_error("Could not update clip plane normals uniform");
+        if (controller.controllable_clip_plane_idx == idx)
+        {
+            controller.controllable_clip_plane_idx = 0;
+            disable_clip_plane_control();
+        }
+    }
 
-    glUniform1fv(clip_planes.origin_distances_uniform.location, MAX_CLIP_PLANES, (const GLfloat*)clip_planes.origin_distances);
-    abort_on_GL_error("Could not update clip plane origin distances uniform");
+    sync_clip_plane(idx);
+}
 
-    clip_planes.normals_uniform.needs_update = 0;
-    clip_planes.origin_distances_uniform.needs_update = 0;
+void set_controllable_clip_plane(unsigned int idx)
+{
+    check(idx < MAX_CLIP_PLANES);
+    if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
+        controller.controllable_clip_plane_idx = idx;
+}
 
-    glUseProgram(0);
+void enable_clip_plane_control(void)
+{
+    controller.state = CONTROL;
+}
+
+void disable_clip_plane_control(void)
+{
+    controller.state = NO_CONTROL;
+}
+
+void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_clip_plane_idx].state != CLIP_PLANE_DISABLED &&
+        clip_planes[controller.controllable_clip_plane_idx].controllability == FULL_CONTROL)
+    {
+        activate_trackball(&controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+    }
+}
+
+void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_clip_plane_idx].state != CLIP_PLANE_DISABLED &&
+        clip_planes[controller.controllable_clip_plane_idx].controllability == FULL_CONTROL)
+    {
+        drag_trackball(&controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+
+        rotate_vector3f_about_axis(&clip_planes[controller.controllable_clip_plane_idx].normal,
+                                   &controller.trackball.current_rotation_axis,
+                                   controller.trackball.current_rotation_angle);
+        normalize_vector3f(&clip_planes[controller.controllable_clip_plane_idx].normal);
+
+        sync_clip_plane(controller.controllable_clip_plane_idx);
+    }
+}
+
+void clip_plane_control_scroll_callback(double scroll_rate)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_clip_plane_idx].state != CLIP_PLANE_DISABLED)
+    {
+        const float new_origin_shift = clip_planes[controller.controllable_clip_plane_idx].origin_shift + controller.origin_shift_rate_modifier*(float)scroll_rate;
+        clip_planes[controller.controllable_clip_plane_idx].origin_shift = clamp(new_origin_shift, -controller.max_abs_origin_shift, controller.max_abs_origin_shift);
+        sync_clip_plane(controller.controllable_clip_plane_idx);
+    }
+}
+
+void clip_plane_control_flip_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_clip_plane_idx].state != CLIP_PLANE_DISABLED)
+    {
+        invert_vector3f(&clip_planes[controller.controllable_clip_plane_idx].normal);
+        clip_planes[controller.controllable_clip_plane_idx].origin_shift = -clip_planes[controller.controllable_clip_plane_idx].origin_shift;
+        sync_clip_plane(controller.controllable_clip_plane_idx);
+    }
+}
+
+void reset_clip_plane(unsigned int idx)
+{
+    check(idx < MAX_CLIP_PLANES);
+
+    set_vector3f_elements(&clip_planes[idx].normal, 0, 0, 0);
+    clip_planes[idx].normal.a[idx % 3] = (idx % 3 == 1) ? 1.0f : -1.0f;
+
+    clip_planes[idx].origin_shift = 0;
+
+    sync_clip_plane(idx);
 }
 
 int axis_aligned_box_in_clipped_region(const Vector3f* offset, const Vector3f* extent)
 {
+    assert(offset);
+    assert(extent);
+
     const Vector3f* corners = get_unit_axis_aligned_box_corners();
 
-    unsigned int plane_idx;
-
-    for (plane_idx = 0; plane_idx < clip_planes.active_count; plane_idx++)
+    for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
     {
-        const Vector3f unoffset_front_corner = multiply_vector3f(extent, corners + clip_planes.axis_aligned_box_front_corners[plane_idx]);
-        const Vector3f front_corner = add_vector3f(offset, &unoffset_front_corner);
+        if (clip_planes[idx].state != CLIP_PLANE_DISABLED)
+        {
+            const Vector3f unoffset_front_corner = multiply_vector3f(extent, corners + clip_planes[idx].axis_aligned_box_front_corner);
+            const Vector3f front_corner = add_vector3f(offset, &unoffset_front_corner);
 
-        if (dot3f(&front_corner, clip_planes.normals + plane_idx) < clip_planes.origin_distances[plane_idx])
-            return 1;
+            if (dot3f(&front_corner, &clip_planes[idx].normal) < clip_planes[idx].origin_shift)
+                return 1;
+        }
     }
 
     return 0;
@@ -116,47 +232,40 @@ int axis_aligned_box_in_clipped_region(const Vector3f* offset, const Vector3f* e
 
 void cleanup_clip_planes(void)
 {
-    destroy_uniform(&clip_planes.active_count_uniform);
-    destroy_uniform(&clip_planes.normals_uniform);
-    destroy_uniform(&clip_planes.origin_distances_uniform);
+    for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
+    {
+        destroy_uniform(&clip_planes[idx].normal_uniform);
+        destroy_uniform(&clip_planes[idx].origin_shift_uniform);
+    }
 }
 
 static void generate_shader_code_for_clip_planes(void)
 {
     check(active_shader_program);
 
-    const char* active_clip_plane_count_name = clip_planes.active_count_uniform.name.chars;
-    const char* clip_plane_normals_name = clip_planes.normals_uniform.name.chars;
-    const char* clip_plane_origin_distances_name = clip_planes.origin_distances_uniform.name.chars;
+    const char* clip_plane_normals_name = "clip_plane_normals";
+    const char* clip_plane_origin_shifts_name = "clip_plane_origin_shifts";
 
     const size_t position_variable_number = get_vertex_position_variable_number();
 
     add_clip_distance_output_in_shader(&active_shader_program->vertex_shader_source, MAX_CLIP_PLANES);
 
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "uint", active_clip_plane_count_name);
-
     add_array_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", clip_plane_normals_name, MAX_CLIP_PLANES);
-    add_array_uniform_in_shader(&active_shader_program->vertex_shader_source, "float", clip_plane_origin_distances_name, MAX_CLIP_PLANES);
+    add_array_uniform_in_shader(&active_shader_program->vertex_shader_source, "float", clip_plane_origin_shifts_name, MAX_CLIP_PLANES);
 
     DynamicString clip_plane_code = create_string(
     "\n    uint clip_plane_idx;"
-    "\n    for (clip_plane_idx = 0; clip_plane_idx < %s; clip_plane_idx++)"
+    "\n    for (clip_plane_idx = 0; clip_plane_idx < %d; clip_plane_idx++)"
     "\n    {"
     "\n        gl_ClipDistance[clip_plane_idx] = dot(variable_%d.xyz, %s[clip_plane_idx]) - %s[clip_plane_idx];"
-    "\n    }"
-    "\n    for (clip_plane_idx = %s; clip_plane_idx < %d; clip_plane_idx++)"
-    "\n    {"
-    "\n        gl_ClipDistance[clip_plane_idx] = 1.0;"
     "\n    }",
-    active_clip_plane_count_name,
-    position_variable_number, clip_plane_normals_name, clip_plane_origin_distances_name,
-    active_clip_plane_count_name, MAX_CLIP_PLANES);
+    MAX_CLIP_PLANES,
+    position_variable_number, clip_plane_normals_name, clip_plane_origin_shifts_name);
 
     LinkedList global_dependencies = create_list();
     append_string_to_list(&global_dependencies, "gl_PerVertex");
-    append_string_to_list(&global_dependencies, active_clip_plane_count_name);
     append_string_to_list(&global_dependencies, clip_plane_normals_name);
-    append_string_to_list(&global_dependencies, clip_plane_origin_distances_name);
+    append_string_to_list(&global_dependencies, clip_plane_origin_shifts_name);
 
     LinkedList variable_dependencies = create_list();
     append_size_t_to_list(&variable_dependencies, position_variable_number);
@@ -168,41 +277,31 @@ static void generate_shader_code_for_clip_planes(void)
     clear_string(&clip_plane_code);
 }
 
-static void sync_clip_planes(void)
+static void sync_clip_plane(unsigned int idx)
 {
     check(active_shader_program);
+    assert(idx < MAX_CLIP_PLANES);
 
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program for updating clip plane uniforms");
 
-    if (clip_planes.active_count_uniform.needs_update)
+    if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
     {
-        glUniform1ui(clip_planes.active_count_uniform.location, clip_planes.active_count);
-        abort_on_GL_error("Could not update number of active clip planes uniform");
+        clip_planes[idx].axis_aligned_box_front_corner = get_axis_aligned_box_front_corner_for_plane(&clip_planes[idx].normal);
 
-        clip_planes.active_count_uniform.needs_update = 0;
+        glUniform3fv(clip_planes[idx].normal_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].normal));
+        abort_on_GL_error("Could not update clip plane normal uniform");
+
+        glUniform1fv(clip_planes[idx].origin_shift_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].origin_shift));
+        abort_on_GL_error("Could not update clip plane origin distance uniform");
     }
-
-    if (clip_planes.normals_uniform.needs_update)
+    else
     {
-        for (unsigned int plane_idx = 0; plane_idx < clip_planes.active_count; plane_idx++)
-            clip_planes.axis_aligned_box_front_corners[plane_idx] = get_axis_aligned_box_front_corner_for_plane(clip_planes.normals + plane_idx);
+        glUniform3fv(clip_planes[idx].normal_uniform.location, 1, (const GLfloat*)(&disabled_normal));
+        abort_on_GL_error("Could not update clip plane normal uniform");
 
-        glUniform3fv(clip_planes.normals_uniform.location, (GLsizei)clip_planes.active_count, (const GLfloat*)clip_planes.normals);
-        abort_on_GL_error("Could not update clip plane normals uniform");
-
-        clip_planes.normals_uniform.needs_update = 0;
-    }
-
-    if (clip_planes.origin_distances_uniform.needs_update)
-    {
-        for (unsigned int plane_idx = 0; plane_idx < clip_planes.active_count; plane_idx++)
-            clip_planes.origin_distances[plane_idx] = dot3f(clip_planes.origins + plane_idx, clip_planes.normals + plane_idx);
-
-        glUniform1fv(clip_planes.origin_distances_uniform.location, (GLsizei)clip_planes.active_count, (const GLfloat*)clip_planes.origin_distances);
-        abort_on_GL_error("Could not update clip plane origins uniform");
-
-        clip_planes.origin_distances_uniform.needs_update = 0;
+        glUniform1fv(clip_planes[idx].origin_shift_uniform.location, 1, (const GLfloat*)(&disabled_origin_shift));
+        abort_on_GL_error("Could not update clip plane origin distance uniform");
     }
 
     glUseProgram(0);
