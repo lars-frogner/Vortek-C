@@ -12,6 +12,8 @@ void initialize_clip_planes(void);
 
 void load_clip_planes(void);
 
+void set_max_clip_plane_origin_shifts(float max_x, float max_y, float max_z);
+
 void set_clip_plane_state(unsigned int plane_idx, enum clip_plane_state state);
 void toggle_clip_plane_enabled_state(unsigned int plane_idx);
 
@@ -21,6 +23,7 @@ void disable_clip_plane_control(void);
 
 void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
 void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
+void clip_plane_control_drag_end_callback(void);
 void clip_plane_control_scroll_callback(double scroll_rate);
 void clip_plane_control_flip_callback(void);
 
