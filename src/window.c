@@ -169,6 +169,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
         {
             case GLFW_KEY_LEFT_SHIFT:
             {
+                camera_control_drag_end_callback();
                 disable_camera_control();
                 enable_clip_plane_control();
                 break;
@@ -263,8 +264,9 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
         {
             case GLFW_KEY_LEFT_SHIFT:
             {
-                enable_camera_control();
+                clip_plane_control_drag_end_callback();
                 disable_clip_plane_control();
+                enable_camera_control();
                 break;
             }
             default:
@@ -290,6 +292,7 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
         {
             mouse_is_pressed = 0;
             camera_control_drag_end_callback();
+            clip_plane_control_drag_end_callback();
         }
     }
 }
