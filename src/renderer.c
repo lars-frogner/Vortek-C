@@ -113,9 +113,6 @@ void renderer_resize_callback(int width, int height)
     update_camera_aspect_ratio((float)width/height);
 }
 
-void renderer_key_action_callback(void)
-{}
-
 static void initialize_rendering_settings(void)
 {
     glDisable(GL_DEPTH_TEST);
