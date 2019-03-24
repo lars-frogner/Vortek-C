@@ -4,6 +4,7 @@
 #include "error.h"
 #include "dynamic_string.h"
 #include "hash_map.h"
+#include "indicators.h"
 #include "texture.h"
 #include "shader_generator.h"
 
@@ -66,6 +67,12 @@ BrickedField* get_texture_bricked_field(const char* name)
     return &field_texture->bricked_field;
 }
 
+const Field* get_texture_field(const char* name)
+{
+    FieldTexture* const field_texture = get_field_texture(name);
+    return field_texture->bricked_field.field;
+}
+
 float field_value_to_texture_value(const char* name, float field_value)
 {
     FieldTexture* const field_texture = get_field_texture(name);
@@ -80,6 +87,18 @@ float texture_value_to_field_value(const char* name, float texture_value)
     const Field* const field = field_texture->bricked_field.field;
     check(field);
     return field->min_value + texture_value*(field->max_value - field->min_value);
+}
+
+const char* add_boundary_indicator_for_field_texture(const char* name, const Vector3f* color)
+{
+    check(color);
+
+    const Field* const field = get_texture_field(name);
+
+    Vector3f lower_corner = {{-field->halfwidth, -field->halfheight, -field->halfdepth}};
+    Vector3f extent = {{2*field->halfwidth, 2*field->halfheight, 2*field->halfdepth}};
+
+    return add_cube_edge_indicator(&lower_corner, &extent, color, "%s_boundaries", name);
 }
 
 void destroy_field_texture(const char* name)
