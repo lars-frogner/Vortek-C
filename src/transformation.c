@@ -8,6 +8,10 @@
 
 #include <math.h>
 
+
+#define MAX_ACTIVE_SHADER_PROGRAMS 2
+
+
 enum controller_state {NO_CONTROL, CONTROL};
 
 typedef struct ProjectionTransformation
@@ -29,14 +33,14 @@ typedef struct Transformation
     Matrix4f modelview_matrix;
     Matrix4f viewprojection_matrix;
     Matrix4f MVP_matrix;
-    Uniform uniform;
+    Uniform uniforms[MAX_ACTIVE_SHADER_PROGRAMS];
 } Transformation;
 
 typedef struct Camera
 {
     Vector3f look_axis;
     Vector3f position;
-    Uniform look_axis_uniform;
+    Uniform look_axis_uniforms[MAX_ACTIVE_SHADER_PROGRAMS];
     int needs_update;
 } Camera;
 
@@ -50,22 +54,30 @@ typedef struct CameraController
     int is_dragging;
 } CameraController;
 
+typedef struct ActiveShaderPrograms
+{
+    ShaderProgram* programs[MAX_ACTIVE_SHADER_PROGRAMS];
+    unsigned int n_active_programs;
+} ActiveShaderPrograms;
+
 
 static void generate_shader_code_for_transformation(void);
 static void update_projection_matrix(void);
 static void sync_transformation(void);
+static void sync_camera(void);
 
 
 static Transformation transformation;
 static Camera camera;
 static CameraController camera_controller;
 
-static ShaderProgram* active_shader_program = NULL;
+static ActiveShaderPrograms active_shader_programs = {{0}, 0};
 
 
-void set_active_shader_program_for_transformation(ShaderProgram* shader_program)
+void add_active_shader_program_for_transformation(ShaderProgram* shader_program)
 {
-    active_shader_program = shader_program;
+    check(active_shader_programs.n_active_programs < MAX_ACTIVE_SHADER_PROGRAMS);
+    active_shader_programs.programs[active_shader_programs.n_active_programs++] = shader_program;
 }
 
 void initialize_transformation(void)
@@ -81,8 +93,11 @@ void initialize_transformation(void)
     transformation.projection.needs_update = 0;
     transformation.projection.type = PERSPECTIVE_PROJECTION;
 
-    initialize_uniform(&transformation.uniform, "MVP_matrix");
-    initialize_uniform(&camera.look_axis_uniform, "look_axis");
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
+    {
+        initialize_uniform(transformation.uniforms + program_idx, "MVP_matrix");
+        initialize_uniform(camera.look_axis_uniforms + program_idx, "look_axis");
+    }
 
     initialize_trackball(&camera_controller.trackball);
     camera_controller.zoom_rate_modifier = 1e-2f;
@@ -95,37 +110,36 @@ void initialize_transformation(void)
 
 void load_transformation(void)
 {
-    check(active_shader_program);
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
+    {
+        ShaderProgram* const active_shader_program = active_shader_programs.programs[program_idx];
+        check(active_shader_program);
 
-    load_uniform(active_shader_program, &transformation.uniform);
-    load_uniform(active_shader_program, &camera.look_axis_uniform);
-
-    transformation.uniform.needs_update = 1;
-    camera.needs_update = 1;
+        load_uniform(active_shader_program, transformation.uniforms + program_idx);
+        load_uniform(active_shader_program, camera.look_axis_uniforms + program_idx);
+    }
 
     sync_transformation();
+    sync_camera();
 }
 
 void set_view_distance(float view_distance)
 {
     set_transform_translation(&transformation.view_matrix, 0, 0, -view_distance);
-    transformation.uniform.needs_update = 1;
-    camera.needs_update = 1;
     sync_transformation();
+    sync_camera();
 }
 
 void apply_model_scaling(float scale)
 {
     assert(scale > 0);
     apply_scaling(&transformation.model_matrix, scale, scale, scale);
-    transformation.uniform.needs_update = 1;
     sync_transformation();
 }
 
 void apply_model_translation(float dx, float dy, float dz)
 {
     apply_translation(&transformation.model_matrix, dx, dy, dz);
-    transformation.uniform.needs_update = 1;
     sync_transformation();
 }
 
@@ -133,9 +147,8 @@ void apply_view_rotation_about_axis(const Vector3f* axis, float angle)
 {
     assert(axis);
     apply_rotation_about_axis(&transformation.view_matrix, axis, angle);
-    transformation.uniform.needs_update = 1;
-    camera.needs_update = 1;
     sync_transformation();
+    sync_camera();
 }
 
 void apply_origin_centered_view_rotation_about_axis(const Vector3f* axis, float angle)
@@ -149,9 +162,8 @@ void apply_origin_centered_view_rotation_about_axis(const Vector3f* axis, float 
     apply_rotation_about_axis(&transformation.view_matrix, axis, angle);
     set_transform_translation(&transformation.view_matrix, view_translation.a[0], view_translation.a[1], view_translation.a[2]);
 
-    transformation.uniform.needs_update = 1;
-    camera.needs_update = 1;
     sync_transformation();
+    sync_camera();
 }
 
 void update_camera_properties(float field_of_view,
@@ -195,18 +207,21 @@ void update_camera_projection_type(enum projection_type type)
 
 void cleanup_transformation(void)
 {
-    destroy_uniform(&transformation.uniform);
-    destroy_uniform(&camera.look_axis_uniform);
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
+    {
+        destroy_uniform(transformation.uniforms + program_idx);
+        destroy_uniform(camera.look_axis_uniforms + program_idx);
+    }
 }
 
 const char* get_transformation_name(void)
 {
-    return transformation.uniform.name.chars;
+    return transformation.uniforms[0].name.chars;
 }
 
 const char* get_camera_look_axis_name(void)
 {
-    return camera.look_axis_uniform.name.chars;
+    return camera.look_axis_uniforms[0].name.chars;
 }
 
 const Matrix4f* get_view_transform_matrix(void)
@@ -318,9 +333,14 @@ void camera_control_scroll_callback(double scroll_rate)
 
 static void generate_shader_code_for_transformation(void)
 {
-    check(active_shader_program);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "mat4", transformation.uniform.name.chars);
-    add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", camera.look_axis_uniform.name.chars);
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
+    {
+        ShaderProgram* const active_shader_program = active_shader_programs.programs[program_idx];
+        check(active_shader_program);
+
+        add_uniform_in_shader(&active_shader_program->vertex_shader_source, "mat4", transformation.uniforms[program_idx].name.chars);
+        add_uniform_in_shader(&active_shader_program->vertex_shader_source, "vec3", camera.look_axis_uniforms[program_idx].name.chars);
+    }
 }
 
 static void update_projection_matrix(void)
@@ -340,43 +360,56 @@ static void update_projection_matrix(void)
                                                                          transformation.projection.far_plane_distance);
     }
 
-    transformation.uniform.needs_update = 1;
     sync_transformation();
 }
 
 static void sync_transformation(void)
 {
-    check(active_shader_program);
+    transformation.modelview_matrix = multiply_matrix4f(&transformation.view_matrix, &transformation.model_matrix);
+    transformation.MVP_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.modelview_matrix);
+    transformation.viewprojection_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.view_matrix);
 
-    glUseProgram(active_shader_program->id);
-    abort_on_GL_error("Could not use shader program for updating transformation uniforms");
-
-    if (transformation.uniform.needs_update)
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
     {
-        transformation.modelview_matrix = multiply_matrix4f(&transformation.view_matrix, &transformation.model_matrix);
-        transformation.MVP_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.modelview_matrix);
-        transformation.viewprojection_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.view_matrix);
+        if (transformation.uniforms[program_idx].location == -1)
+            continue;
 
-        glUniformMatrix4fv(transformation.uniform.location, 1, GL_TRUE, transformation.MVP_matrix.a);
+        ShaderProgram* const active_shader_program = active_shader_programs.programs[program_idx];
+        check(active_shader_program);
+
+        glUseProgram(active_shader_program->id);
+        abort_on_GL_error("Could not use shader program for updating transformation uniforms");
+
+        glUniformMatrix4fv(transformation.uniforms[program_idx].location, 1, GL_TRUE, transformation.MVP_matrix.a);
         abort_on_GL_error("Could not update transform matrix uniform");
-
-        transformation.uniform.needs_update = 0;
     }
 
-    if (camera.needs_update)
+    glUseProgram(0);
+}
+
+static void sync_camera(void)
+{
+    const Matrix4f* view_matrix = &transformation.view_matrix;
+
+    Matrix4f inverse_view_matrix = *view_matrix;
+    invert_matrix4f(&inverse_view_matrix);
+    get_matrix4f_third_column_vector3f(&inverse_view_matrix, &camera.look_axis);
+    normalize_vector3f(&camera.look_axis);
+    get_matrix4f_fourth_column_vector3f(&inverse_view_matrix, &camera.position);
+
+    for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
     {
-        const Matrix4f* view_matrix = &transformation.view_matrix;
+        if (camera.look_axis_uniforms[program_idx].location == -1)
+            continue;
 
-        Matrix4f inverse_view_matrix = *view_matrix;
-        invert_matrix4f(&inverse_view_matrix);
-        get_matrix4f_third_column_vector3f(&inverse_view_matrix, &camera.look_axis);
-        normalize_vector3f(&camera.look_axis);
-        get_matrix4f_fourth_column_vector3f(&inverse_view_matrix, &camera.position);
+        ShaderProgram* const active_shader_program = active_shader_programs.programs[program_idx];
+        check(active_shader_program);
 
-        glUniform3f(camera.look_axis_uniform.location, camera.look_axis.a[0], camera.look_axis.a[1], camera.look_axis.a[2]);
+        glUseProgram(active_shader_program->id);
+        abort_on_GL_error("Could not use shader program for updating transformation uniforms");
+
+        glUniform3f(camera.look_axis_uniforms[program_idx].location, camera.look_axis.a[0], camera.look_axis.a[1], camera.look_axis.a[2]);
         abort_on_GL_error("Could not update look axis uniform");
-
-        camera.needs_update = 0;
     }
 
     glUseProgram(0);

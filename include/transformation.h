@@ -6,7 +6,7 @@
 
 enum projection_type {PERSPECTIVE_PROJECTION, ORTHOGRAPHIC_PROJECTION};
 
-void set_active_shader_program_for_transformation(ShaderProgram* shader_program);
+void add_active_shader_program_for_transformation(ShaderProgram* shader_program);
 
 void initialize_transformation(void);
 
