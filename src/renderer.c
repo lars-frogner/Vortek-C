@@ -5,6 +5,7 @@
 #include "fields.h"
 #include "shaders.h"
 #include "transformation.h"
+#include "indicators.h"
 #include "texture.h"
 #include "field_textures.h"
 #include "transfer_functions.h"
@@ -23,6 +24,7 @@ typedef struct SingleFieldRenderingState
 {
     const char* texture_name;
     const char* TF_name;
+    const char* field_boundaries_indicator_name;
 } SingleFieldRenderingState;
 
 
@@ -33,7 +35,8 @@ static void post_initialize_single_field_rendering(SingleFieldRenderingState* st
 
 static WindowShape window_shape;
 
-static ShaderProgram shader_program;
+static ShaderProgram rendering_shader_program;
+static ShaderProgram indicator_shader_program;
 
 static SingleFieldRenderingState single_field_rendering_state;
 
@@ -44,14 +47,17 @@ void initialize_renderer(void)
 
     glGetError();
 
-    initialize_shader_program(&shader_program);
+    initialize_shader_program(&rendering_shader_program);
+    initialize_shader_program(&indicator_shader_program);
 
-    set_active_shader_program_for_transformation(&shader_program);
-    set_active_shader_program_for_planes(&shader_program);
-    set_active_shader_program_for_clip_planes(&shader_program);
-    set_active_shader_program_for_textures(&shader_program);
-    set_active_shader_program_for_field_textures(&shader_program);
-    set_active_shader_program_for_transfer_functions(&shader_program);
+    add_active_shader_program_for_transformation(&rendering_shader_program);
+    add_active_shader_program_for_transformation(&indicator_shader_program);
+    set_active_shader_program_for_planes(&rendering_shader_program);
+    set_active_shader_program_for_clip_planes(&rendering_shader_program);
+    set_active_shader_program_for_textures(&rendering_shader_program);
+    set_active_shader_program_for_field_textures(&rendering_shader_program);
+    set_active_shader_program_for_transfer_functions(&rendering_shader_program);
+    set_active_shader_program_for_indicators(&indicator_shader_program);
 
     initialize_rendering_settings();
     initialize_fields();
@@ -61,10 +67,12 @@ void initialize_renderer(void)
     initialize_textures();
     initialize_field_textures();
     initialize_transfer_functions();
+    initialize_indicators();
 
     pre_initialize_single_field_rendering(&single_field_rendering_state);
 
-    compile_shader_program(&shader_program);
+    compile_shader_program(&rendering_shader_program);
+    compile_shader_program(&indicator_shader_program);
 
     load_transformation();
     load_planes();
@@ -79,6 +87,7 @@ void initialize_renderer(void)
 
 void cleanup_renderer(void)
 {
+    cleanup_indicators();
     cleanup_transfer_functions();
     cleanup_field_textures();
     cleanup_textures();
@@ -86,7 +95,8 @@ void cleanup_renderer(void)
     cleanup_planes();
     cleanup_transformation();
     cleanup_fields();
-    destroy_shader_program(&shader_program);
+    destroy_shader_program(&indicator_shader_program);
+    destroy_shader_program(&rendering_shader_program);
 }
 
 void update_renderer_window_size_in_pixels(int width, int height)
@@ -105,6 +115,8 @@ void renderer_update_callback(void)
     glClear(GL_COLOR_BUFFER_BIT);
 
     draw_active_bricked_field();
+
+    draw_edge_indicator(single_field_rendering_state.field_boundaries_indicator_name);
 }
 
 void renderer_resize_callback(int width, int height)
@@ -141,14 +153,19 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
     //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
 
+    set_max_clip_plane_origin_shifts(field->halfwidth, field->halfheight, field->halfdepth);
+
     set_min_sub_brick_size(6);
 
     state->texture_name = create_scalar_field_texture(field, 6, 2);
     state->TF_name = create_transfer_function();
 
-    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&shader_program.fragment_shader_source, state->texture_name, "out_tex_coord");
-    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&shader_program.fragment_shader_source, state->TF_name, field_texture_variable_number);
-    assign_variable_to_new_output_in_shader(&shader_program.fragment_shader_source, "vec4", mapped_field_texture_variable_number, "out_color");
+    Vector3f color = {{1.0f, 1.0f, 1.0f}};
+    state->field_boundaries_indicator_name = add_boundary_indicator_for_field_texture(state->texture_name, &color);
+
+    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&rendering_shader_program.fragment_shader_source, state->texture_name, "out_tex_coord");
+    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&rendering_shader_program.fragment_shader_source, state->TF_name, field_texture_variable_number);
+    assign_variable_to_new_output_in_shader(&rendering_shader_program.fragment_shader_source, "vec4", mapped_field_texture_variable_number, "out_color");
 }
 
 static void post_initialize_single_field_rendering(SingleFieldRenderingState* state)
