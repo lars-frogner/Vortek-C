@@ -42,6 +42,16 @@ static void generate_shader_code_for_clip_planes(void);
 static void sync_clip_plane(unsigned int idx);
 
 
+// Corner positions of a (twice) unit axis aligned cube centered on the origin
+static const Vector3f centered_corners[8] = {{{-1, -1, -1}},
+                                             {{ 1, -1, -1}},
+                                             {{-1,  1, -1}},
+                                             {{-1, -1,  1}},
+                                             {{ 1, -1,  1}},
+                                             {{ 1,  1, -1}},
+                                             {{-1,  1,  1}},
+                                             {{ 1,  1,  1}}};
+
 static ClipPlane clip_planes[MAX_CLIP_PLANES];
 
 static Vector3f disabled_normal;
@@ -195,7 +205,6 @@ void clip_plane_control_scroll_callback(double scroll_rate)
     {
         const float new_origin_shift = clip_planes[controller.controllable_idx].origin_shift + controller.origin_shift_rate_modifier*(float)scroll_rate;
 
-        const Vector3f* centered_corners = get_centered_unit_axis_aligned_box_corners();
         const Vector3f max_shift_vector = multiply_vector3f(&controller.max_abs_origin_shifts,
                                                             centered_corners + clip_planes[controller.controllable_idx].axis_aligned_box_front_corner);
         const float max_abs_origin_shift = dot3f(&max_shift_vector, &clip_planes[controller.controllable_idx].normal);
