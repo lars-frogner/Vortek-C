@@ -5,55 +5,87 @@
 #include "geometry.h"
 #include "dynamic_string.h"
 #include "hash_map.h"
+#include "fields.h"
 #include "transformation.h"
+#include "field_textures.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
 
 
-typedef struct IndicatorEdge
+typedef struct IndicatorVertices
 {
-    GLuint indices[2];
-} IndicatorEdge;
+    Vector4f* positions;
+    Vector4f* colors;
+    size_t n_vertices;
+} IndicatorVertices;
 
-typedef struct EdgeSet
+typedef struct Indicator
 {
     DynamicString name;
     IndicatorVertices vertices;
-    IndicatorEdge* edges;
-    unsigned int n_edges;
     void* vertex_buffer;
-    void* edge_buffer;
     size_t vertex_buffer_size;
-    size_t edge_buffer_size;
+    unsigned int* index_buffer;
+    size_t n_indices;
+    size_t index_buffer_size;
     GLuint vertex_array_object_id;
     GLuint vertex_buffer_id;
-    GLuint edge_buffer_id;
-} EdgeSet;
+    GLuint index_buffer_id;
+} Indicator;
 
 
 static void generate_shader_code_for_indicators(void);
 
-static EdgeSet* create_edge_set(const DynamicString* name, unsigned int n_vertices, unsigned int n_edges);
-static EdgeSet* get_edge_set(const char* name);
+static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Vector4f* color, const char* name, ...);
 
-static void initialize_vertex_array_object_for_edge_set(EdgeSet* edge_set);
+static Indicator* create_indicator(const DynamicString* name, size_t n_vertices, size_t n_indices);
+static Indicator* get_indicator(const char* name);
 
-static void allocate_edge_set_buffers(EdgeSet* edge_set, unsigned int n_vertices, unsigned int n_edges);
+static void sync_indicator(Indicator* indicator);
 
-static void set_cube_vertex_positions(IndicatorVertices* vertices, unsigned int* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
-static void set_cube_edges(EdgeSet* edge_set, unsigned int* running_vertex_idx, unsigned int* running_edge_idx);
-static void set_vertex_colors(IndicatorVertices* vertices, unsigned int start_idx, unsigned int n_vertices, const Vector3f* color);
+static void initialize_vertex_array_object_for_indicator(Indicator* indicator);
 
-static void update_vertex_array_object_for_edge_set(EdgeSet* edge_set);
+static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, size_t n_indices);
 
-static void destroy_edge_set(EdgeSet* edge_set);
-static void destroy_vertex_array_object_for_edge_set(EdgeSet* edge_set);
-static void clear_edge_set(EdgeSet* edge_set);
-static void reset_edge_set_attributes(EdgeSet* edge_set);
+static void set_cube_vertex_positions(IndicatorVertices* vertices, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
+static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx);
+static void set_vertex_colors(IndicatorVertices* vertices, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color);
+
+static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx);
+
+static void update_vertex_array_object_for_indicator(Indicator* indicator);
+
+static void draw_sub_brick_edges(const SubBrickTreeNode* node);
+
+static void destroy_indicator(Indicator* indicator);
+static void destroy_vertex_array_object_for_indicator(Indicator* indicator);
+static void clear_indicator(Indicator* indicator);
+static void reset_indicator_attributes(Indicator* indicator);
 
 
-static HashMap edge_sets;
+// Indices for vertices outlining the edges of each cube face
+static const unsigned int cube_edge_vertex_indices[24] = {0, 3, 6, 2,
+                                                          4, 1, 5, 7,
+                                                          0, 1, 4, 3,
+                                                          6, 7, 5, 2,
+                                                          0, 2, 5, 1,
+                                                          6, 3, 4, 7};
+
+// Sets of faces adjacent to each cube corner                      //    2----------5
+static const unsigned int adjacent_cube_faces[8][3] = {{0, 2, 4},  //   /|         /|
+                                                       {1, 2, 4},  //  / |       3/ |
+                                                       {0, 3, 4},  // 6----------7 1|
+                                                       {0, 2, 5},  // |  | 4   5 |  |
+                                                       {1, 2, 5},  // |0 0-------|--1
+                                                       {1, 3, 4},  // | /2       | /
+                                                       {0, 3, 5},  // |/         |/
+                                                       {1, 3, 5}}; // 3----------4
+
+// Sign of the normal direction of each cube face
+static const int cube_face_normal_signs[6] = {-1, 1, -1, 1, -1, 1};
+
+static HashMap indicators;
 
 static ShaderProgram* active_shader_program = NULL;
 
@@ -65,80 +97,172 @@ void set_active_shader_program_for_indicators(ShaderProgram* shader_program)
 
 void initialize_indicators(void)
 {
-    edge_sets = create_map();
+    indicators = create_map();
     generate_shader_code_for_indicators();
 }
 
-IndicatorVertices* access_edge_indicator_vertices(const char* name)
+void add_boundary_indicator_for_field(const char* field_texture_name, const Vector4f* color)
 {
-    EdgeSet* const edge_set = get_edge_set(name);
-    return &edge_set->vertices;
-}
-
-const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Vector3f* color, const char* name, ...)
-{
-    check(lower_corner);
-    check(extent);
     check(color);
 
-    va_list args;
-    va_start(args, name);
-    const DynamicString full_name = create_string_from_arg_list(name, args);
-    va_end(args);
+    BrickedField* const bricked_field = get_texture_bricked_field(field_texture_name);
+    Field* const field = bricked_field->field;
 
-    EdgeSet* const edge_set = create_edge_set(&full_name, 8, 12);
+    Vector3f lower_corner = {{-field->halfwidth, -field->halfheight, -field->halfdepth}};
+    Vector3f extent = {{2*field->halfwidth, 2*field->halfheight, 2*field->halfdepth}};
 
-    unsigned int start_vertex_idx = 0;
-    set_cube_vertex_positions(&edge_set->vertices, &start_vertex_idx, lower_corner, extent);
-
-    start_vertex_idx = 0;
-    unsigned int edge_idx = 0;
-    set_cube_edges(edge_set, &start_vertex_idx, &edge_idx);
-
-    set_vertex_colors(&edge_set->vertices, 0, 8, color);
-
-    update_vertex_array_object_for_edge_set(edge_set);
-
-    return edge_set->name.chars;
+    bricked_field->field_boundary_indicator_name = add_cube_edge_indicator(&lower_corner, &extent, color, "%s_boundaries", field_texture_name);
 }
 
-void set_cube_edge_indicator_vertex_positions(const char* name, const Vector3f* lower_corner, const Vector3f* extent)
+void add_boundary_indicator_for_bricks(const char* field_texture_name, const Vector4f* color)
 {
-    EdgeSet* const edge_set = get_edge_set(name);
+    check(color);
 
-    unsigned int start_vertex_idx = 0;
-    set_cube_vertex_positions(&edge_set->vertices, &start_vertex_idx, lower_corner, extent);
+    BrickedField* const bricked_field = get_texture_bricked_field(field_texture_name);
 
-    update_vertex_array_object_for_edge_set(edge_set);
+    const DynamicString name = create_string("%s_brick_boundaries", field_texture_name);
+    Indicator* const indicator = create_indicator(&name, 8*bricked_field->n_bricks, 24*bricked_field->n_bricks);
+
+    size_t vertex_idx = 0;
+    size_t index_idx = 0;
+
+    for (size_t brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        const Brick* const brick = bricked_field->bricks + brick_idx;
+        set_cube_edges(indicator, vertex_idx, &index_idx);
+        set_cube_vertex_positions(&indicator->vertices, &vertex_idx, &brick->spatial_offset, &brick->spatial_extent);
+    }
+
+    set_vertex_colors(&indicator->vertices, 0, indicator->vertices.n_vertices, color);
+
+    sync_indicator(indicator);
+
+    bricked_field->brick_boundaries_indicator_name = indicator->name.chars;
 }
 
-void set_edge_indicator_constant_color(const char* name, const Vector3f* color)
+void add_boundary_indicator_for_sub_bricks(const char* field_texture_name, const Vector4f* color)
 {
-    EdgeSet* const edge_set = get_edge_set(name);
-    set_vertex_colors(&edge_set->vertices, 0, 8, color);
-    update_vertex_array_object_for_edge_set(edge_set);
+    check(color);
+
+    BrickedField* const bricked_field = get_texture_bricked_field(field_texture_name);
+
+    size_t brick_idx;
+    size_t n_sub_bricks = 0;
+
+    for (brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        const Brick* const brick = bricked_field->bricks + brick_idx;
+        n_sub_bricks += 1 + brick->tree->n_children;
+    }
+
+    const DynamicString name = create_string("%s_sub_brick_boundaries", field_texture_name);
+    Indicator* const indicator = create_indicator(&name, 8*n_sub_bricks, 24*n_sub_bricks);
+
+    size_t vertex_idx = 0;
+    size_t index_idx = 0;
+
+    for (brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        Brick* const brick = bricked_field->bricks + brick_idx;
+        set_sub_brick_cube_data(indicator, brick->tree, &vertex_idx, &index_idx);
+    }
+
+    set_vertex_colors(&indicator->vertices, 0, indicator->vertices.n_vertices, color);
+
+    sync_indicator(indicator);
+
+    bricked_field->sub_brick_boundaries_indicator_name = indicator->name.chars;
 }
 
-void sync_edge_indicator(const char* name)
+void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass)
 {
-    EdgeSet* const edge_set = get_edge_set(name);
-    update_vertex_array_object_for_edge_set(edge_set);
-}
+    assert(bricked_field);
+    assert(reference_corner_idx < 8);
 
-void draw_edge_indicator(const char* name)
-{
-    EdgeSet* const edge_set = get_edge_set(name);
+    if (!bricked_field->field_boundary_indicator_name)
+        return;
 
-    assert(edge_set->vertex_array_object_id > 0);
+    Indicator* const indicator = get_indicator(bricked_field->field_boundary_indicator_name);
 
+    const Vector3f reference_corner = extract_vector3f_from_vector4f(indicator->vertices.positions + reference_corner_idx);
+
+    assert(active_shader_program);
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program");
 
-    glBindVertexArray(edge_set->vertex_array_object_id);
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
     abort_on_GL_error("Could not bind VAO for drawing");
 
-    glDrawElements(GL_LINES, (GLsizei)(2*edge_set->n_edges), GL_UNSIGNED_INT, (GLvoid*)0);
-    abort_on_GL_error("Could not draw edge set");
+    unsigned int face_is_visible[6] = {0};
+
+    for (unsigned int dim = 0; dim < 3; dim++)
+    {
+        const unsigned int adjacent_face_idx = adjacent_cube_faces[reference_corner_idx][dim];
+        face_is_visible[adjacent_face_idx] = cube_face_normal_signs[adjacent_face_idx]*get_component_of_vector_from_model_point_to_camera(&reference_corner, dim) >= 0;
+    }
+
+    for (unsigned int face_idx = 0; face_idx < 6; face_idx++)
+    {
+        if ((pass == INDICATOR_FRONT_PASS && face_is_visible[face_idx]) || (pass == INDICATOR_BACK_PASS && !face_is_visible[face_idx]))
+        {
+            glDrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_INT, (GLvoid*)(4*face_idx*sizeof(unsigned int)));
+            abort_on_GL_error("Could not draw indicator");
+        }
+    }
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
+void draw_brick_boundary_indicator(const BrickedField* bricked_field)
+{
+    assert(bricked_field);
+
+    if (!bricked_field->brick_boundaries_indicator_name)
+        return;
+
+    Indicator* const indicator = get_indicator(bricked_field->brick_boundaries_indicator_name);
+
+    assert(active_shader_program);
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing");
+
+    glDrawElements(GL_LINES, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
+void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field)
+{
+    assert(bricked_field);
+
+    if (!bricked_field->sub_brick_boundaries_indicator_name)
+        return;
+
+    Indicator* const indicator = get_indicator(bricked_field->sub_brick_boundaries_indicator_name);
+
+    assert(active_shader_program);
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing");
+
+    for (size_t brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        const Brick* const brick = bricked_field->bricks + brick_idx;
+        draw_sub_brick_edges(brick->tree);
+    }
 
     glBindVertexArray(0);
 
@@ -147,19 +271,19 @@ void draw_edge_indicator(const char* name)
 
 void destroy_edge_indicator(const char* name)
 {
-    EdgeSet* const edge_set = get_edge_set(name);
-    destroy_edge_set(edge_set);
+    Indicator* const indicator = get_indicator(name);
+    destroy_indicator(indicator);
 }
 
 void cleanup_indicators(void)
 {
-    for (reset_map_iterator(&edge_sets); valid_map_iterator(&edge_sets); advance_map_iterator(&edge_sets))
+    for (reset_map_iterator(&indicators); valid_map_iterator(&indicators); advance_map_iterator(&indicators))
     {
-        EdgeSet* const edge_set = get_edge_set(get_current_map_key(&edge_sets));
-        destroy_edge_set(edge_set);
+        Indicator* const indicator = get_indicator(get_current_map_key(&indicators));
+        destroy_indicator(indicator);
     }
 
-    destroy_map(&edge_sets);
+    destroy_map(&indicators);
 }
 
 static void generate_shader_code_for_indicators(void)
@@ -178,90 +302,119 @@ static void generate_shader_code_for_indicators(void)
     assign_input_to_new_output_in_shader(&active_shader_program->fragment_shader_source, "vec4", "ex_color", "out_color");
 }
 
-static EdgeSet* create_edge_set(const DynamicString* name, unsigned int n_vertices, unsigned int n_edges)
+static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Vector4f* color, const char* name, ...)
 {
-    check(name);
+    check(lower_corner);
+    check(extent);
+    check(color);
 
-    if (map_has_key(&edge_sets, name->chars))
-        print_severe_message("Cannot create edge set \"%s\" because an edge set with this name already exists.", name);
+    va_list args;
+    va_start(args, name);
+    const DynamicString full_name = create_string_from_arg_list(name, args);
+    va_end(args);
 
-    MapItem item = insert_new_map_item(&edge_sets, name->chars, sizeof(EdgeSet));
-    EdgeSet* const edge_set = (EdgeSet*)item.data;
+    Indicator* const indicator = create_indicator(&full_name, 8, 24);
 
-    copy_string_attributes(name, &edge_set->name);
-    reset_edge_set_attributes(edge_set);
-    initialize_vertex_array_object_for_edge_set(edge_set);
-    allocate_edge_set_buffers(edge_set, n_vertices, n_edges);
+    size_t vertex_idx = 0;
+    set_cube_vertex_positions(&indicator->vertices, &vertex_idx, lower_corner, extent);
 
-    return edge_set;
+    size_t index_idx = 0;
+    set_cube_edges(indicator, 0, &index_idx);
+
+    set_vertex_colors(&indicator->vertices, 0, 8, color);
+
+    sync_indicator(indicator);
+
+    return indicator->name.chars;
 }
 
-static EdgeSet* get_edge_set(const char* name)
+static Indicator* create_indicator(const DynamicString* name, size_t n_vertices, size_t n_indices)
 {
     check(name);
 
-    MapItem item = get_map_item(&edge_sets, name);
+    if (map_has_key(&indicators, name->chars))
+        print_severe_message("Cannot create indicator \"%s\" because an indicator with this name already exists.", name);
+
+    MapItem item = insert_new_map_item(&indicators, name->chars, sizeof(Indicator));
+    Indicator* const indicator = (Indicator*)item.data;
+
+    copy_string_attributes(name, &indicator->name);
+    reset_indicator_attributes(indicator);
+    initialize_vertex_array_object_for_indicator(indicator);
+    allocate_indicator_buffers(indicator, n_vertices, n_indices);
+
+    return indicator;
+}
+
+static Indicator* get_indicator(const char* name)
+{
+    check(name);
+
+    MapItem item = get_map_item(&indicators, name);
 
     if (!item.data)
-        print_severe_message("Could not get edge set \"%s\" because it doesn't exist.", name);
+        print_severe_message("Could not get indicator \"%s\" because it doesn't exist.", name);
 
-    assert(item.size == sizeof(EdgeSet));
-    EdgeSet* const edge_set = (EdgeSet*)item.data;
-    check(edge_set);
+    assert(item.size == sizeof(Indicator));
+    Indicator* const indicator = (Indicator*)item.data;
+    check(indicator);
 
-    return edge_set;
+    return indicator;
 }
 
-static void initialize_vertex_array_object_for_edge_set(EdgeSet* edge_set)
+static void sync_indicator(Indicator* indicator)
 {
-    assert(edge_set);
+    update_vertex_array_object_for_indicator(indicator);
+}
+
+static void initialize_vertex_array_object_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
 
     // Generate vertex array object for keeping track of vertex attributes
-    glGenVertexArrays(1, &edge_set->vertex_array_object_id);
+    glGenVertexArrays(1, &indicator->vertex_array_object_id);
     abort_on_GL_error("Could not generate VAO");
 
-    glBindVertexArray(edge_set->vertex_array_object_id);
+    glBindVertexArray(indicator->vertex_array_object_id);
     abort_on_GL_error("Could not bind VAO");
 
     // Generate buffer object for vertices
-    glGenBuffers(1, &edge_set->vertex_buffer_id);
+    glGenBuffers(1, &indicator->vertex_buffer_id);
     abort_on_GL_error("Could not generate vertex buffer object");
 
-    // Generate buffer object for face indices
-    glGenBuffers(1, &edge_set->edge_buffer_id);
-    abort_on_GL_error("Could not generate face buffer object");
+    // Generate buffer object for indices
+    glGenBuffers(1, &indicator->index_buffer_id);
+    abort_on_GL_error("Could not generate index buffer object");
 
     glBindVertexArray(0);
 }
 
-static void allocate_edge_set_buffers(EdgeSet* edge_set, unsigned int n_vertices, unsigned int n_edges)
+static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, size_t n_indices)
 {
-    assert(edge_set);
+    assert(indicator);
 
-    if (edge_set->vertex_buffer || edge_set->edge_buffer)
-        clear_edge_set(edge_set);
+    if (indicator->vertex_buffer || indicator->index_buffer)
+        clear_indicator(indicator);
 
-    edge_set->vertices.n_vertices = n_vertices;
-    edge_set->n_edges = n_edges;
+    indicator->vertices.n_vertices = n_vertices;
+    indicator->n_indices = n_indices;
 
-    edge_set->vertex_buffer_size = 2*n_vertices*sizeof(Vector4f);
-    edge_set->edge_buffer_size = n_edges*sizeof(IndicatorEdge);
+    indicator->vertex_buffer_size = 2*n_vertices*sizeof(Vector4f);
+    indicator->index_buffer_size = n_indices*sizeof(unsigned int);
 
-    edge_set->vertex_buffer = malloc(edge_set->vertex_buffer_size);
-    if (!edge_set->vertex_buffer)
-        print_severe_message("Could not allocate memory for edge set vertices.");
+    indicator->vertex_buffer = malloc(indicator->vertex_buffer_size);
+    if (!indicator->vertex_buffer)
+        print_severe_message("Could not allocate memory for indicator vertices.");
 
-    edge_set->edge_buffer = malloc(edge_set->edge_buffer_size);
-    if (!edge_set->edge_buffer)
-        print_severe_message("Could not allocate memory for edge set edges.");
+    indicator->index_buffer = (unsigned int*)malloc(indicator->index_buffer_size);
+    if (!indicator->index_buffer)
+        print_severe_message("Could not allocate memory for indicator indices.");
 
-    edge_set->vertices.positions = (Vector4f*)edge_set->vertex_buffer;
-    edge_set->vertices.colors = edge_set->vertices.positions + n_vertices;
-
-    edge_set->edges = (IndicatorEdge*)edge_set->edge_buffer;
+    indicator->vertices.positions = (Vector4f*)indicator->vertex_buffer;
+    indicator->vertices.colors = indicator->vertices.positions + n_vertices;
 }
 
-static void set_cube_vertex_positions(IndicatorVertices* vertices, unsigned int* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent)
+static void set_cube_vertex_positions(IndicatorVertices* vertices, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent)
 {
     assert(vertices);
     assert(running_vertex_idx);
@@ -269,17 +422,7 @@ static void set_cube_vertex_positions(IndicatorVertices* vertices, unsigned int*
     assert(lower_corner);
     assert(extent);
 
-    //    2----------5
-    //   /|         /|
-    //  / |        / |
-    // 6----------7  |
-    // |  |       |  |
-    // |  0-------|--1
-    // | /        | /
-    // |/         |/
-    // 3----------4
-
-    unsigned int vertex_idx = *running_vertex_idx;
+    size_t vertex_idx = *running_vertex_idx;
 
     set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1],                lower_corner->a[2],                1.0f);
     vertex_idx++;
@@ -301,83 +444,66 @@ static void set_cube_vertex_positions(IndicatorVertices* vertices, unsigned int*
     *running_vertex_idx = vertex_idx;
 }
 
-static void set_cube_edges(EdgeSet* edge_set, unsigned int* running_vertex_idx, unsigned int* running_edge_idx)
+static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx)
 {
-    assert(edge_set);
-    assert(running_vertex_idx);
-    assert(*running_vertex_idx + 8 <= edge_set->vertices.n_vertices);
-    assert(running_edge_idx);
-    assert(*running_edge_idx + 12 <= edge_set->n_edges);
+    assert(indicator);
+    assert(start_vertex_idx + 8 <= indicator->vertices.n_vertices);
+    assert(running_index_idx);
+    assert(*running_index_idx + 24 <= indicator->n_indices);
 
-    unsigned int start_vertex_idx = *running_vertex_idx;
-    unsigned int edge_idx = *running_edge_idx;
+    size_t start_index_idx = *running_index_idx;
 
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 0;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 1;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 1;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 5;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 5;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 2;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 2;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 0;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 0;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 3;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 3;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 6;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 6;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 2;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 1;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 4;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 4;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 7;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 7;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 5;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 3;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 4;
-    edge_idx++;
-    edge_set->edges[edge_idx].indices[0] = start_vertex_idx + 6;
-    edge_set->edges[edge_idx].indices[1] = start_vertex_idx + 7;
-    edge_idx++;
+    for(size_t index_idx = 0; index_idx < 24; index_idx++)
+    {
+        indicator->index_buffer[start_index_idx + index_idx] = (unsigned int)(start_vertex_idx + cube_edge_vertex_indices[index_idx]);
+    }
 
-    *running_vertex_idx = start_vertex_idx + 8;
-    *running_edge_idx = edge_idx;
+    *running_index_idx = start_index_idx + 24;
 }
 
-static void set_vertex_colors(IndicatorVertices* vertices, unsigned int start_idx, unsigned int n_vertices, const Vector3f* color)
+static void set_vertex_colors(IndicatorVertices* vertices, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color)
 {
     assert(vertices);
-    assert(start_idx + n_vertices <= vertices->n_vertices);
+    assert(start_vertex_idx + n_vertices <= vertices->n_vertices);
     assert(color);
 
-    for (unsigned int vertex_idx = start_idx; vertex_idx < start_idx + n_vertices; vertex_idx++)
-        copy_vector3f_to_vector4f(color, vertices->colors + vertex_idx);
+    for (size_t vertex_idx = start_vertex_idx; vertex_idx < start_vertex_idx + n_vertices; vertex_idx++)
+        copy_vector4f(color, vertices->colors + vertex_idx);
 }
 
-static void update_vertex_array_object_for_edge_set(EdgeSet* edge_set)
+static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx)
 {
-    assert(edge_set);
-    assert(edge_set->vertex_buffer);
-    assert(edge_set->edge_buffer);
-    assert(edge_set->vertex_array_object_id > 0);
-    assert(edge_set->vertex_buffer_id > 0);
-    assert(edge_set->edge_buffer_id > 0);
+    assert(indicator);
+    assert(node);
+    assert(running_vertex_idx);
+    assert(running_index_idx);
 
-    glBindVertexArray(edge_set->vertex_array_object_id);
+    if (node->lower_child)
+        set_sub_brick_cube_data(indicator, node->lower_child, running_vertex_idx, running_index_idx);
+
+    if (node->upper_child)
+        set_sub_brick_cube_data(indicator, node->upper_child, running_vertex_idx, running_index_idx);
+
+    node->indicator_idx = *running_index_idx;
+    set_cube_edges(indicator, *running_vertex_idx, running_index_idx);
+    set_cube_vertex_positions(&indicator->vertices, running_vertex_idx, &node->spatial_offset, &node->spatial_extent);
+}
+
+static void update_vertex_array_object_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
+    assert(indicator->vertex_buffer);
+    assert(indicator->index_buffer);
+    assert(indicator->vertex_array_object_id > 0);
+    assert(indicator->vertex_buffer_id > 0);
+    assert(indicator->index_buffer_id > 0);
+
+    glBindVertexArray(indicator->vertex_array_object_id);
     abort_on_GL_error("Could not bind VAO");
 
     // Store buffer of all vertices on device
-    glBindBuffer(GL_ARRAY_BUFFER, edge_set->vertex_buffer_id);
-    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)edge_set->vertex_buffer_size, (GLvoid*)edge_set->vertex_buffer, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, indicator->vertex_buffer_id);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)indicator->vertex_buffer_size, (GLvoid*)indicator->vertex_buffer, GL_STATIC_DRAW);
     abort_on_GL_error("Could not bind VBO to VAO");
 
     // Specify vertex attribute pointer for vertex positions
@@ -386,68 +512,85 @@ static void update_vertex_array_object_for_edge_set(EdgeSet* edge_set)
     abort_on_GL_error("Could not set VAO vertex index attributes");
 
     // Specify vertex attribute pointer for vertex colors
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(sizeof(Vector4f)*edge_set->vertices.n_vertices));
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(sizeof(Vector4f)*indicator->vertices.n_vertices));
     glEnableVertexAttribArray(1);
     abort_on_GL_error("Could not set VAO plane index attributes");
 
     // Store buffer of all edge indices on device
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edge_set->edge_buffer_id);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)edge_set->edge_buffer_size, (GLvoid*)edge_set->edge_buffer, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indicator->index_buffer_id);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)indicator->index_buffer_size, (GLvoid*)indicator->index_buffer, GL_STATIC_DRAW);
     abort_on_GL_error("Could not bind IBO to VAO");
 
     glBindVertexArray(0);
 }
 
-static void destroy_edge_set(EdgeSet* edge_set)
+static void draw_sub_brick_edges(const SubBrickTreeNode* node)
 {
-    destroy_vertex_array_object_for_edge_set(edge_set);
-    clear_edge_set(edge_set);
-    clear_string(&edge_set->name);
+    assert(node);
+
+    if (node->was_drawn)
+    {
+        glDrawElements(GL_LINE_LOOP, 24, GL_UNSIGNED_INT, (GLvoid*)(node->indicator_idx*sizeof(unsigned int)));
+        abort_on_GL_error("Could not draw indicator");
+    }
+    else
+    {
+        if (node->lower_child)
+            draw_sub_brick_edges(node->lower_child);
+
+        if (node->upper_child)
+            draw_sub_brick_edges(node->upper_child);
+    }
 }
 
-static void destroy_vertex_array_object_for_edge_set(EdgeSet* edge_set)
+static void destroy_indicator(Indicator* indicator)
 {
-    assert(edge_set);
+    destroy_vertex_array_object_for_indicator(indicator);
+    clear_indicator(indicator);
+    clear_string(&indicator->name);
+}
 
-    if (edge_set->edge_buffer_id != 0)
-        glDeleteBuffers(1, &edge_set->edge_buffer_id);
+static void destroy_vertex_array_object_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
 
-    if (edge_set->vertex_buffer_id != 0)
-        glDeleteBuffers(1, &edge_set->vertex_buffer_id);
+    if (indicator->index_buffer_id != 0)
+        glDeleteBuffers(1, &indicator->index_buffer_id);
 
-    if (edge_set->vertex_array_object_id != 0)
-        glDeleteVertexArrays(1, &edge_set->vertex_array_object_id);
+    if (indicator->vertex_buffer_id != 0)
+        glDeleteBuffers(1, &indicator->vertex_buffer_id);
+
+    if (indicator->vertex_array_object_id != 0)
+        glDeleteVertexArrays(1, &indicator->vertex_array_object_id);
 
     abort_on_GL_error("Could not destroy buffer objects");
 }
 
-static void clear_edge_set(EdgeSet* edge_set)
+static void clear_indicator(Indicator* indicator)
 {
-    assert(edge_set);
+    assert(indicator);
 
-    if (edge_set->vertex_buffer)
-        free(edge_set->vertex_buffer);
+    if (indicator->vertex_buffer)
+        free(indicator->vertex_buffer);
 
-    if (edge_set->edge_buffer)
-        free(edge_set->edge_buffer);
+    if (indicator->index_buffer)
+        free(indicator->index_buffer);
 
-    reset_edge_set_attributes(edge_set);
+    reset_indicator_attributes(indicator);
 }
 
-static void reset_edge_set_attributes(EdgeSet* edge_set)
+static void reset_indicator_attributes(Indicator* indicator)
 {
-    assert(edge_set);
+    assert(indicator);
 
-    edge_set->vertices.positions = NULL;
-    edge_set->vertices.colors = NULL;
-    edge_set->vertices.n_vertices = 0;
+    indicator->vertices.positions = NULL;
+    indicator->vertices.colors = NULL;
+    indicator->vertices.n_vertices = 0;
 
-    edge_set->edges = NULL;
-    edge_set->n_edges = 0;
+    indicator->vertex_buffer = NULL;
+    indicator->vertex_buffer_size = 0;
 
-    edge_set->vertex_buffer = NULL;
-    edge_set->edge_buffer = NULL;
-
-    edge_set->vertex_buffer_size = 0;
-    edge_set->edge_buffer_size = 0;
+    indicator->index_buffer = NULL;
+    indicator->n_indices = 0;
+    indicator->index_buffer_size = 0;
 }
