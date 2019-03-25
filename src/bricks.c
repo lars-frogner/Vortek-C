@@ -64,7 +64,7 @@ void set_min_sub_brick_size(unsigned int size)
     sub_brick_size_limit = 2*size;
 }
 
-void create_bricked_field(BrickedField* bricked_field, const Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
+void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
 {
     check(bricked_field);
     check(field);
@@ -235,6 +235,10 @@ void create_bricked_field(BrickedField* bricked_field, const Field* field, unsig
     bricked_field->brick_size = brick_size;
 
     bricked_field->texture_unit = 0;
+
+    bricked_field->field_boundary_indicator_name = NULL;
+    bricked_field->brick_boundaries_indicator_name = NULL;
+    bricked_field->sub_brick_boundaries_indicator_name = NULL;
 
     create_brick_tree(bricked_field);
 }
@@ -469,6 +473,8 @@ static SubBrickTreeNode* create_sub_brick_tree_nodes(const Brick* brick, const F
     new_start_indices.idx[axis] = middle_idx;
     node->upper_child = create_sub_brick_tree_nodes(brick, field, level + 1, new_start_indices, end_indices);
 
+    node->n_children = 2 + node->lower_child->n_children + node->upper_child->n_children;
+
     return node;
 }
 
@@ -480,6 +486,7 @@ static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Fi
     node->lower_child = NULL;
     node->upper_child = NULL;
     node->split_axis = 0;
+    node->n_children = 0;
 
     node->offset_x = brick->offset_x + start_indices.idx[0];
     node->offset_y = brick->offset_y + start_indices.idx[1];
@@ -500,6 +507,7 @@ static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Fi
                           node->size_z*field->voxel_depth);
 
     node->visibility_ratio = 1.0f;
+    node->was_drawn = 0;
 
     return node;
 }

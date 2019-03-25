@@ -46,6 +46,7 @@ typedef struct SubBrickTreeNode
     SubBrickTreeNode* lower_child;
     SubBrickTreeNode* upper_child;
     unsigned int split_axis;
+    size_t n_children;
     size_t offset_x;
     size_t offset_y;
     size_t offset_z;
@@ -55,11 +56,13 @@ typedef struct SubBrickTreeNode
     Vector3f spatial_offset;
     Vector3f spatial_extent;
     float visibility_ratio;
+    int was_drawn;
+    size_t indicator_idx;
 } SubBrickTreeNode;
 
 typedef struct BrickedField
 {
-    const Field* field;
+    Field* field;
     Brick* bricks;
     BrickTreeNode* tree;
     size_t n_bricks;
@@ -68,11 +71,14 @@ typedef struct BrickedField
     size_t n_bricks_z;
     size_t brick_size;
     GLuint texture_unit;
+    const char* field_boundary_indicator_name;
+    const char* brick_boundaries_indicator_name;
+    const char* sub_brick_boundaries_indicator_name;
 } BrickedField;
 
 void set_min_sub_brick_size(unsigned int size);
 
-void create_bricked_field(BrickedField* bricked_field, const Field* field, unsigned int brick_size_exponent, unsigned int kernel_size);
+void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned int brick_size_exponent, unsigned int kernel_size);
 
 void destroy_bricked_field(BrickedField* bricked_field);
 
