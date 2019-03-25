@@ -15,6 +15,7 @@
 #include "dynamic_string.h"
 #include "linked_list.h"
 #include "transformation.h"
+#include "indicators.h"
 #include "shader_generator.h"
 #include "clip_planes.h"
 
@@ -61,16 +62,8 @@ typedef struct PlaneSeparation
 {
     GLfloat value;
     float original_value;
-    float current_multiplier;
     Uniform uniform;
 } PlaneSeparation;
-
-typedef struct BrickCorners
-{
-    Vector3f corners[8];
-    Vector3f current_spatial_extent;
-    Uniform uniform;
-} BrickCorners;
 
 typedef struct ActiveBrickedField
 {
@@ -80,6 +73,16 @@ typedef struct ActiveBrickedField
     unsigned int current_back_corner_idx;
     unsigned int current_front_corner_idx;
 } ActiveBrickedField;
+
+typedef struct Configuration
+{
+    float plane_separation_multiplier;
+    float lower_visibility_threshold;
+    float upper_visibility_threshold;
+    int draw_field_outline;
+    int draw_brick_outline;
+    int draw_sub_brick_outline;
+} Configuration;
 
 
 static void initialize_plane_stack(void);
@@ -94,7 +97,7 @@ static void generate_shader_code_for_planes(void);
 
 static void draw_brick_tree_nodes(const BrickTreeNode* node);
 static void draw_brick(const Brick* brick);
-static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node);
+static void draw_sub_brick_tree_nodes(SubBrickTreeNode* node);
 static void draw_sub_brick(const SubBrickTreeNode* node);
 static void draw_plane_faces(unsigned int n_planes);
 
@@ -110,24 +113,16 @@ static PlaneStack plane_stack;
 
 static PlaneSeparation plane_separation;
 
-static Uniform corners_uniform;             //    2----------5
-static Vector3f corners[8] = {{{0, 0, 0}},  //   /|         /|
-                              {{1, 0, 0}},  //  / |        / |
-                              {{0, 1, 0}},  // 6----------7  |
-                              {{0, 0, 1}},  // |  |       |  |
-                              {{1, 0, 1}},  // |  0-------|--1
-                              {{1, 1, 0}},  // | /        | /
-                              {{0, 1, 1}},  // |/         |/
-                              {{1, 1, 1}}}; // 3----------4
-
-static Vector3f centered_corners[8] = {{{-1, -1, -1}},
-                                       {{ 1, -1, -1}},
-                                       {{-1,  1, -1}},
-                                       {{-1, -1,  1}},
-                                       {{ 1, -1,  1}},
-                                       {{ 1,  1, -1}},
-                                       {{-1,  1,  1}},
-                                       {{ 1,  1,  1}}};
+// Corner positions of a unit axis aligned cube
+static Uniform corners_uniform;                   //    2----------5
+static const Vector3f corners[8] = {{{0, 0, 0}},  //   /|         /|
+                                    {{1, 0, 0}},  //  / |        / |
+                                    {{0, 1, 0}},  // 6----------7  |
+                                    {{0, 0, 1}},  // |  |       |  |
+                                    {{1, 0, 1}},  // |  0-------|--1
+                                    {{1, 1, 0}},  // | /        | /
+                                    {{0, 1, 1}},  // |/         |/
+                                    {{1, 1, 1}}}; // 3----------4
 
 static const unsigned int back_corners[2][2][2] = {{{0, 3}, {2, 6}},
                                                    {{1, 4}, {5, 7}}};
@@ -189,12 +184,11 @@ static Uniform sampling_correction_uniform;
 static size_t position_variable_number;
 static size_t tex_coord_variable_number;
 
-static float lower_visibility_threshold = 0.0f;
-static float upper_visibility_threshold = 0.9f;
-
 static ActiveBrickedField active_bricked_field = {NULL, NULL, NULL, 0, 0};
 
 static ShaderProgram* active_shader_program = NULL;
+
+static Configuration configuration;
 
 
 void set_active_shader_program_for_planes(ShaderProgram* shader_program)
@@ -206,9 +200,15 @@ void initialize_planes(void)
 {
     initialize_plane_stack();
 
+    configuration.lower_visibility_threshold = 0.0f;
+    configuration.upper_visibility_threshold = 0.9f;
+    configuration.draw_field_outline = 1;
+    configuration.draw_brick_outline = 0;
+    configuration.draw_sub_brick_outline = 0;
+
     plane_separation.value = 0.0f;
     plane_separation.original_value = 0.0f;
-    plane_separation.current_multiplier = 0.0f;
+    configuration.plane_separation_multiplier = 0.0f;
     initialize_uniform(&plane_separation.uniform, "plane_separation");
 
     initialize_uniform(&corners_uniform, "corners");
@@ -289,14 +289,29 @@ void set_active_bricked_field(const BrickedField* bricked_field)
 
 void set_lower_visibility_threshold(float threshold)
 {
-    check(threshold >= 0.0f && threshold <= upper_visibility_threshold);
-    lower_visibility_threshold = threshold;
+    check(threshold >= 0.0f && threshold <= configuration.upper_visibility_threshold);
+    configuration.lower_visibility_threshold = threshold;
 }
 
 void set_upper_visibility_threshold(float threshold)
 {
-    check(threshold >= lower_visibility_threshold && threshold <= 1.0f);
-    upper_visibility_threshold = threshold;
+    check(threshold >= configuration.lower_visibility_threshold && threshold <= 1.0f);
+    configuration.upper_visibility_threshold = threshold;
+}
+
+void toggle_field_outline_drawing(void)
+{
+    configuration.draw_field_outline = !configuration.draw_field_outline;
+}
+
+void toggle_brick_outline_drawing(void)
+{
+    configuration.draw_brick_outline = !configuration.draw_brick_outline;
+}
+
+void toggle_sub_brick_outline_drawing(void)
+{
+    configuration.draw_sub_brick_outline = !configuration.draw_sub_brick_outline;
 }
 
 void set_plane_separation(float spacing_multiplier)
@@ -321,7 +336,7 @@ void set_plane_separation(float spacing_multiplier)
     if (max_n_planes < 2)
         print_severe_message("Cannot create fewer than two planes.");
 
-    plane_separation.current_multiplier = spacing_multiplier;
+    configuration.plane_separation_multiplier = spacing_multiplier;
 
     if (plane_separation.original_value == 0.0f)
         plane_separation.original_value = plane_separation.value;
@@ -337,7 +352,7 @@ void set_plane_separation(float spacing_multiplier)
 
 float get_plane_separation(void)
 {
-    return plane_separation.current_multiplier;
+    return configuration.plane_separation_multiplier;
 }
 
 size_t get_vertex_position_variable_number(void)
@@ -348,11 +363,6 @@ size_t get_vertex_position_variable_number(void)
 const Vector3f* get_unit_axis_aligned_box_corners(void)
 {
     return corners;
-}
-
-const Vector3f* get_centered_unit_axis_aligned_box_corners(void)
-{
-    return centered_corners;
 }
 
 unsigned int get_axis_aligned_box_back_corner_for_plane(const Vector3f* plane_normal)
@@ -379,6 +389,9 @@ void draw_active_bricked_field()
     active_bricked_field.current_back_corner_idx = get_axis_aligned_box_back_corner_for_plane(active_bricked_field.current_look_axis);
     active_bricked_field.current_front_corner_idx = opposite_corners[active_bricked_field.current_back_corner_idx];
 
+    if (configuration.draw_field_outline)
+        draw_field_boundary_indicator(bricked_field, active_bricked_field.current_back_corner_idx, INDICATOR_BACK_PASS);
+
     BrickTreeNode* node = bricked_field->tree;
 
     glUseProgram(active_shader_program->id);
@@ -397,6 +410,15 @@ void draw_active_bricked_field()
     glBindVertexArray(0);
 
     glUseProgram(0);
+
+    if (configuration.draw_sub_brick_outline)
+        draw_sub_brick_boundary_indicator(bricked_field);
+
+    if (configuration.draw_brick_outline)
+        draw_brick_boundary_indicator(bricked_field);
+
+    if (configuration.draw_field_outline)
+        draw_field_boundary_indicator(bricked_field, active_bricked_field.current_front_corner_idx, INDICATOR_FRONT_PASS);
 
     active_bricked_field.current_look_axis = NULL;
     active_bricked_field.current_camera_position = NULL;
@@ -714,7 +736,7 @@ static void draw_brick_tree_nodes(const BrickTreeNode* node)
     assert(node);
 
     // If the brick is invisible, stop traversal of this branch
-    if (node->visibility_ratio <= lower_visibility_threshold)
+    if (node->visibility_ratio <= configuration.lower_visibility_threshold)
         return;
 
     if (node->brick)
@@ -788,19 +810,20 @@ static void draw_brick(const Brick* brick)
     draw_sub_brick_tree_nodes(brick->tree);
 }
 
-static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
+static void draw_sub_brick_tree_nodes(SubBrickTreeNode* node)
 {
     assert(node);
 
-    if (node->visibility_ratio <= lower_visibility_threshold)
+    if (node->visibility_ratio <= configuration.lower_visibility_threshold)
     {
         // If the sub brick is invisible, stop traversal of this branch
+        node->was_drawn = 0;
         return;
     }
     else
     {
         // If the sub brick is not sufficiently visible and it has children, traverse these recursively
-        if (node->visibility_ratio < upper_visibility_threshold && node->lower_child)
+        if (node->visibility_ratio < configuration.upper_visibility_threshold && node->lower_child)
         {
             assert(node->upper_child);
 
@@ -830,6 +853,7 @@ static void draw_sub_brick_tree_nodes(const SubBrickTreeNode* node)
         {
             // If the sub brick is sufficiently visible or is a leaf node, draw it
             draw_sub_brick(node);
+            node->was_drawn = 1;
         }
     }
 }
