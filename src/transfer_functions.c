@@ -428,6 +428,8 @@ static void update_sub_brick_tree_node_visibility_ratios(const TransferFunction*
     {
         node->visibility_ratio = compute_sub_brick_visibility_ratio(transfer_function, field, node);
     }
+
+    node->was_drawn = 0;
 }
 
 static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node)
