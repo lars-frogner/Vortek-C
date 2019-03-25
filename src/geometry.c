@@ -180,6 +180,16 @@ void copy_vector3f(const Vector3f* source, Vector3f* destination)
     destination->a[2] = source->a[2];
 }
 
+void copy_vector4f(const Vector4f* source, Vector4f* destination)
+{
+    assert(source);
+    assert(destination);
+    destination->a[0] = source->a[0];
+    destination->a[1] = source->a[1];
+    destination->a[2] = source->a[2];
+    destination->a[3] = source->a[3];
+}
+
 void copy_vector3_to_vector3f(const Vector3* source, Vector3f* destination)
 {
     assert(source);
@@ -197,6 +207,15 @@ void copy_vector3f_to_vector4f(const Vector3f* source, Vector4f* destination)
     destination->a[1] = source->a[1];
     destination->a[2] = source->a[2];
     destination->a[3] = 1.0f;
+}
+
+void copy_vector4f_to_vector3f(const Vector4f* source, Vector3f* destination)
+{
+    assert(source);
+    assert(destination);
+    destination->a[0] = source->a[0];
+    destination->a[1] = source->a[1];
+    destination->a[2] = source->a[2];
 }
 
 int equal_vector3f(const Vector3f* v1, const Vector3f* v2)
