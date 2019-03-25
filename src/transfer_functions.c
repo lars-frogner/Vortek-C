@@ -33,7 +33,6 @@ typedef struct ValueLimits
     size_t upper_visibility;
     Uniform scale_uniform;
     Uniform offset_uniform;
-    int needs_sync;
 } ValueLimits;
 
 typedef struct TransferFunction
@@ -48,7 +47,6 @@ typedef struct TransferFunctionTexture
 {
     TransferFunction transfer_function;
     Texture* texture;
-    int needs_sync;
 } TransferFunctionTexture;
 
 
@@ -67,6 +65,7 @@ static void transfer_transfer_function_texture(TransferFunctionTexture* transfer
 
 static void load_transfer_function(TransferFunctionTexture* transfer_function_texture);
 static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture);
+static void sync_transfer_function_limits(TransferFunctionTexture* transfer_function_texture);
 
 static void clear_transfer_function_texture(TransferFunctionTexture* transfer_function_texture);
 static void reset_transfer_function_texture_data(TransferFunctionTexture* transfer_function_texture, unsigned int component);
@@ -148,15 +147,6 @@ void load_transfer_functions(void)
     }
 }
 
-void sync_transfer_functions(void)
-{
-    for (reset_map_iterator(&transfer_function_textures); valid_map_iterator(&transfer_function_textures); advance_map_iterator(&transfer_function_textures))
-    {
-        TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(get_current_map_key(&transfer_function_textures));
-        sync_transfer_function(transfer_function_texture);
-    }
-}
-
 void print_transfer_function(const char* name, enum transfer_function_component component)
 {
     TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
@@ -193,7 +183,6 @@ void set_piecewise_linear_transfer_function_node(const char* name, enum transfer
         set_piecewise_linear_transfer_function_data(transfer_function, component, node, closest_node_above,
                                                     value, transfer_function->output[closest_node_above][component]);
 
-    transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
@@ -227,7 +216,6 @@ void remove_piecewise_linear_transfer_function_node(const char* name, enum trans
                                                 transfer_function->output[closest_node_below][component],
                                                 transfer_function->output[closest_node_above][component]);
 
-    transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
@@ -251,7 +239,6 @@ void set_logarithmic_transfer_function(const char* name, enum transfer_function_
 
     set_logarithmic_transfer_function_data(transfer_function, component, TF_START_NODE, TF_END_NODE, start_value, end_value);
 
-    transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
@@ -263,8 +250,7 @@ void set_transfer_function_lower_limit(const char* name, float lower_limit)
     transfer_function->limits.lower_limit = fminf(transfer_function->limits.upper_limit, fmaxf(0.0f, lower_limit));
     update_transfer_function_limit_quantities(transfer_function);
 
-    transfer_function->limits.needs_sync = 1;
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function_limits(transfer_function_texture);
 }
 
 void set_transfer_function_upper_limit(const char* name, float upper_limit)
@@ -275,8 +261,7 @@ void set_transfer_function_upper_limit(const char* name, float upper_limit)
     transfer_function->limits.upper_limit = fmaxf(transfer_function->limits.lower_limit, fminf(1.0f, upper_limit));
     update_transfer_function_limit_quantities(transfer_function);
 
-    transfer_function->limits.needs_sync = 1;
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function_limits(transfer_function_texture);
 }
 
 void set_transfer_function_lower_node(const char* name, enum transfer_function_component component, float value)
@@ -289,7 +274,6 @@ void set_transfer_function_lower_node(const char* name, enum transfer_function_c
     if (component == TF_ALPHA)
         transfer_function->limits.lower_visibility = value > INVISIBLE_ALPHA;
 
-    transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
@@ -303,7 +287,6 @@ void set_transfer_function_upper_node(const char* name, enum transfer_function_c
     if (component == TF_ALPHA)
         transfer_function->limits.upper_visibility = value > INVISIBLE_ALPHA;
 
-    transfer_function_texture->needs_sync = 1;
     sync_transfer_function(transfer_function_texture);
 }
 
@@ -505,8 +488,6 @@ static void transfer_transfer_function_texture(TransferFunctionTexture* transfer
                  GL_FLOAT,
                  (GLvoid*)transfer_function_texture->transfer_function.output);
     abort_on_GL_error("Could not define 1D texture image for transfer function");
-
-    transfer_function_texture->needs_sync = 0;
 }
 
 static void load_transfer_function(TransferFunctionTexture* transfer_function_texture)
@@ -519,9 +500,7 @@ static void load_transfer_function(TransferFunctionTexture* transfer_function_te
     load_uniform(active_shader_program, &transfer_function->limits.scale_uniform);
     load_uniform(active_shader_program, &transfer_function->limits.offset_uniform);
 
-    transfer_function->limits.needs_sync = 1;
-
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function_limits(transfer_function_texture);
 }
 
 static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture)
@@ -529,38 +508,34 @@ static void sync_transfer_function(TransferFunctionTexture* transfer_function_te
     assert(active_shader_program);
     assert(transfer_function_texture);
 
+    glActiveTexture(GL_TEXTURE0 + transfer_function_texture->texture->unit);
+    abort_on_GL_error("Could not set active texture unit for transfer function");
+
+    glTexSubImage1D(GL_TEXTURE_1D,
+                    0,
+                    0,
+                    (GLsizei)TRANSFER_FUNCTION_SIZE,
+                    GL_RGBA,
+                    GL_FLOAT,
+                    (GLvoid*)transfer_function_texture->transfer_function.output);
+    abort_on_GL_error("Could not sync transfer function texture data");
+}
+
+static void sync_transfer_function_limits(TransferFunctionTexture* transfer_function_texture)
+{
+    assert(active_shader_program);
+    assert(transfer_function_texture);
+
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
-
-    if (transfer_function_texture->needs_sync)
-    {
-        glActiveTexture(GL_TEXTURE0 + transfer_function_texture->texture->unit);
-        abort_on_GL_error("Could not set active texture unit for transfer function");
-
-        glTexSubImage1D(GL_TEXTURE_1D,
-                        0,
-                        0,
-                        (GLsizei)TRANSFER_FUNCTION_SIZE,
-                        GL_RGBA,
-                        GL_FLOAT,
-                        (GLvoid*)transfer_function_texture->transfer_function.output);
-        abort_on_GL_error("Could not sync transfer function texture data");
-
-        transfer_function_texture->needs_sync = 0;
-    }
 
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program for updating field texture uniforms");
 
-    if (transfer_function->limits.needs_sync)
-    {
-        glUniform1f(transfer_function->limits.scale_uniform.location, transfer_function->limits.scale);
-        abort_on_GL_error("Could not update transfer function limit scale uniform");
+    glUniform1f(transfer_function->limits.scale_uniform.location, transfer_function->limits.scale);
+    abort_on_GL_error("Could not update transfer function limit scale uniform");
 
-        glUniform1f(transfer_function->limits.offset_uniform.location, transfer_function->limits.offset);
-        abort_on_GL_error("Could not update transfer function limit offset uniform");
-
-        transfer_function->limits.needs_sync = 0;
-    }
+    glUniform1f(transfer_function->limits.offset_uniform.location, transfer_function->limits.offset);
+    abort_on_GL_error("Could not update transfer function limit offset uniform");
 
     glUseProgram(0);
 }
@@ -575,7 +550,6 @@ static void clear_transfer_function_texture(TransferFunctionTexture* transfer_fu
     destroy_uniform(&transfer_function_texture->transfer_function.limits.offset_uniform);
     destroy_uniform(&transfer_function_texture->transfer_function.limits.scale_uniform);
 
-    transfer_function_texture->needs_sync = 0;
     transfer_function_texture->texture = NULL;
 }
 
@@ -611,8 +585,6 @@ static void reset_transfer_function_texture_data(TransferFunctionTexture* transf
         transfer_function->limits.lower_visibility = 1;
         transfer_function->limits.upper_visibility = 1;
     }
-
-    transfer_function_texture->needs_sync = 1;
 }
 
 static unsigned int find_closest_node_above(const TransferFunction* transfer_function, unsigned int component, unsigned int node)

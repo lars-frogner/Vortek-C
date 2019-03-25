@@ -16,7 +16,6 @@ void initialize_transfer_functions(void);
 const char* create_transfer_function(void);
 
 void load_transfer_functions(void);
-void sync_transfer_functions(void);
 
 void print_transfer_function(const char* name, enum transfer_function_component component);
 

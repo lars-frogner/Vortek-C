@@ -9,7 +9,6 @@ typedef struct Uniform
 {
     DynamicString name;
     GLint location;
-    int needs_update;
 } Uniform;
 
 typedef struct ShaderProgram

@@ -161,7 +161,6 @@ void initialize_uniform(Uniform* uniform, const char* name, ...)
     va_end(args);
 
     uniform->location = -1;
-    uniform->needs_update = 0;
 }
 
 void load_uniform(const ShaderProgram* shader_program, Uniform* uniform)

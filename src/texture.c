@@ -144,8 +144,6 @@ static void load_texture(ExtendedTexture* extended_texture)
 
     load_uniform(active_shader_program, &extended_texture->uniform);
 
-    extended_texture->uniform.needs_update = 1;
-
     sync_texture(extended_texture);
 }
 
@@ -157,13 +155,8 @@ static void sync_texture(ExtendedTexture* extended_texture)
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program for updating field texture uniforms");
 
-    if (extended_texture->uniform.needs_update)
-    {
-        glUniform1i(extended_texture->uniform.location, (GLint)extended_texture->texture.unit);
-        abort_on_GL_error("Could not set texture uniform location");
-
-        extended_texture->uniform.needs_update = 0;
-    }
+    glUniform1i(extended_texture->uniform.location, (GLint)extended_texture->texture.unit);
+    abort_on_GL_error("Could not set texture uniform location");
 
     glUseProgram(0);
 }

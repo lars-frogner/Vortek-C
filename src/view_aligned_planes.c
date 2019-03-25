@@ -101,7 +101,7 @@ static void draw_sub_brick_tree_nodes(SubBrickTreeNode* node);
 static void draw_sub_brick(const SubBrickTreeNode* node);
 static void draw_plane_faces(unsigned int n_planes);
 
-static void sync_planes(void);
+static void sync_plane_separation(void);
 
 static void cleanup_plane_stack(void);
 static void destroy_vertex_array_object(void);
@@ -282,9 +282,6 @@ void load_planes(void)
 void set_active_bricked_field(const BrickedField* bricked_field)
 {
     active_bricked_field.bricked_field = bricked_field;
-    pad_fractions_uniform.needs_update = 1;
-
-    sync_planes();
 }
 
 void set_lower_visibility_threshold(float threshold)
@@ -341,13 +338,10 @@ void set_plane_separation(float spacing_multiplier)
     if (plane_separation.original_value == 0.0f)
         plane_separation.original_value = plane_separation.value;
 
-    plane_separation.uniform.needs_update = 1;
-    sampling_correction_uniform.needs_update = 1;
-
     if (max_n_planes > plane_stack.n_planes)
         update_number_of_planes(max_n_planes);
 
-    sync_planes();
+    sync_plane_separation();
 }
 
 float get_plane_separation(void)
@@ -921,28 +915,18 @@ static void draw_plane_faces(unsigned int n_planes)
     abort_on_GL_error("Could not draw planes");
 }
 
-static void sync_planes(void)
+static void sync_plane_separation(void)
 {
     check(active_shader_program);
 
     glUseProgram(active_shader_program->id);
     abort_on_GL_error("Could not use shader program for updating plane uniforms");
 
-    if (plane_separation.uniform.needs_update)
-    {
-        glUniform1f(plane_separation.uniform.location, plane_separation.value);
-        abort_on_GL_error("Could not update plane separation uniform");
+    glUniform1f(plane_separation.uniform.location, plane_separation.value);
+    abort_on_GL_error("Could not update plane separation uniform");
 
-        plane_separation.uniform.needs_update = 0;
-    }
-
-    if (sampling_correction_uniform.needs_update)
-    {
-        glUniform1f(sampling_correction_uniform.location, plane_separation.value/plane_separation.original_value);
-        abort_on_GL_error("Could not update sampling correction uniform");
-
-        sampling_correction_uniform.needs_update = 0;
-    }
+    glUniform1f(sampling_correction_uniform.location, plane_separation.value/plane_separation.original_value);
+    abort_on_GL_error("Could not update sampling correction uniform");
 
     glUseProgram(0);
 }

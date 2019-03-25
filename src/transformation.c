@@ -22,7 +22,6 @@ typedef struct ProjectionTransformation
     float far_plane_distance;
     enum projection_type type;
     Matrix4f matrix;
-    int needs_update;
 } ProjectionTransformation;
 
 typedef struct Transformation
@@ -41,7 +40,6 @@ typedef struct Camera
     Vector3f look_axis;
     Vector3f position;
     Uniform look_axis_uniforms[MAX_ACTIVE_SHADER_PROGRAMS];
-    int needs_update;
 } Camera;
 
 typedef struct CameraController
@@ -90,7 +88,6 @@ void initialize_transformation(void)
     transformation.projection.aspect_ratio = 1.0f;
     transformation.projection.near_plane_distance = 0.1f;;
     transformation.projection.far_plane_distance = 100.0f;
-    transformation.projection.needs_update = 0;
     transformation.projection.type = PERSPECTIVE_PROJECTION;
 
     for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)

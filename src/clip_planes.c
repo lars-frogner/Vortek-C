@@ -317,7 +317,6 @@ static void sync_clip_plane(unsigned int idx)
 
     if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
     {
-
         clip_planes[idx].axis_aligned_box_front_corner = get_axis_aligned_box_front_corner_for_plane(&clip_planes[idx].normal);
 
         glUniform3fv(clip_planes[idx].normal_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].normal));
