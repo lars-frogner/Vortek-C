@@ -3,6 +3,7 @@
 #include "error.h"
 #include "renderer.h"
 #include "transformation.h"
+#include "view_aligned_planes.h"
 #include "clip_planes.h"
 
 #include <stdio.h>
@@ -133,11 +134,11 @@ static void update_FPS(GLFWwindow* window_handle)
     fps_counter.frame_count++;
     const double current_time = glfwGetTime();
     const double duration = current_time - fps_counter.previous_time;
-    if (duration >= 0.2f)
+    if (duration >= 0.5f)
     {
         const double fps = fps_counter.frame_count/duration;
         char title[40];
-        sprintf(title, "%s - %.1f FPS", WINDOW_TITLE, fps);
+        sprintf(title, "%s - %.2g FPS", WINDOW_TITLE, fps);
         glfwSetWindowTitle(window_handle, title);
 
         fps_counter.previous_time = current_time;
@@ -252,6 +253,21 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 {
                     clip_plane_control_flip_callback();
                 }
+                break;
+            }
+            case GLFW_KEY_O:
+            {
+                toggle_field_outline_drawing();
+                break;
+            }
+            case GLFW_KEY_B:
+            {
+                toggle_brick_outline_drawing();
+                break;
+            }
+            case GLFW_KEY_T:
+            {
+                toggle_sub_brick_outline_drawing();
                 break;
             }
             default:
