@@ -24,7 +24,6 @@ typedef struct SingleFieldRenderingState
 {
     const char* texture_name;
     const char* TF_name;
-    const char* field_boundaries_indicator_name;
 } SingleFieldRenderingState;
 
 
@@ -115,8 +114,6 @@ void renderer_update_callback(void)
     glClear(GL_COLOR_BUFFER_BIT);
 
     draw_active_bricked_field();
-
-    draw_edge_indicator(single_field_rendering_state.field_boundaries_indicator_name);
 }
 
 void renderer_resize_callback(int width, int height)
@@ -160,8 +157,12 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     state->texture_name = create_scalar_field_texture(field, 6, 2);
     state->TF_name = create_transfer_function();
 
-    Vector3f color = {{1.0f, 1.0f, 1.0f}};
-    state->field_boundaries_indicator_name = add_boundary_indicator_for_field_texture(state->texture_name, &color);
+    Vector4f field_boundary_color = {{1.0f, 1.0f, 1.0f, 0.15f}};
+    Vector4f brick_boundary_color = {{0.0f, 1.0f, 0.0f, 0.15f}};
+    Vector4f sub_brick_boundary_color = {{0.0f, 0.0f, 1.0f, 0.15f}};
+    add_boundary_indicator_for_field(state->texture_name, &field_boundary_color);
+    add_boundary_indicator_for_bricks(state->texture_name, &brick_boundary_color);
+    add_boundary_indicator_for_sub_bricks(state->texture_name, &sub_brick_boundary_color);
 
     const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&rendering_shader_program.fragment_shader_source, state->texture_name, "out_tex_coord");
     const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&rendering_shader_program.fragment_shader_source, state->TF_name, field_texture_variable_number);
