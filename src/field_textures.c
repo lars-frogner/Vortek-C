@@ -4,7 +4,6 @@
 #include "error.h"
 #include "dynamic_string.h"
 #include "hash_map.h"
-#include "indicators.h"
 #include "texture.h"
 #include "shader_generator.h"
 
@@ -40,7 +39,7 @@ void set_active_shader_program_for_field_textures(ShaderProgram* shader_program)
     active_shader_program = shader_program;
 }
 
-const char* create_scalar_field_texture(const Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
+const char* create_scalar_field_texture(Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
 {
     check(field);
     check(active_shader_program);
@@ -67,7 +66,7 @@ BrickedField* get_texture_bricked_field(const char* name)
     return &field_texture->bricked_field;
 }
 
-const Field* get_texture_field(const char* name)
+Field* get_texture_field(const char* name)
 {
     FieldTexture* const field_texture = get_field_texture(name);
     return field_texture->bricked_field.field;
@@ -87,18 +86,6 @@ float texture_value_to_field_value(const char* name, float texture_value)
     const Field* const field = field_texture->bricked_field.field;
     check(field);
     return field->min_value + texture_value*(field->max_value - field->min_value);
-}
-
-const char* add_boundary_indicator_for_field_texture(const char* name, const Vector3f* color)
-{
-    check(color);
-
-    const Field* const field = get_texture_field(name);
-
-    Vector3f lower_corner = {{-field->halfwidth, -field->halfheight, -field->halfdepth}};
-    Vector3f extent = {{2*field->halfwidth, 2*field->halfheight, 2*field->halfdepth}};
-
-    return add_cube_edge_indicator(&lower_corner, &extent, color, "%s_boundaries", name);
 }
 
 void destroy_field_texture(const char* name)
