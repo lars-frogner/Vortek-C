@@ -95,7 +95,7 @@ static void update_vertex_array_object(void);
 
 static void generate_shader_code_for_planes(void);
 
-static void draw_brick_tree_nodes(const BrickTreeNode* node);
+static void draw_brick_tree_nodes(BrickTreeNode* node);
 static void draw_brick(const Brick* brick);
 static void draw_sub_brick_tree_nodes(SubBrickTreeNode* node);
 static void draw_sub_brick(const SubBrickTreeNode* node);
@@ -725,17 +725,21 @@ static void generate_shader_code_for_planes(void)
     add_uniform_in_shader(&active_shader_program->fragment_shader_source, "float", sampling_correction_name);
 }
 
-static void draw_brick_tree_nodes(const BrickTreeNode* node)
+static void draw_brick_tree_nodes(BrickTreeNode* node)
 {
     assert(node);
 
     // If the brick is invisible, stop traversal of this branch
     if (node->visibility_ratio <= configuration.lower_visibility_threshold)
+    {
+        node->visibility = REGION_INVISIBLE;
         return;
+    }
 
     if (node->brick)
     {
         draw_brick(node->brick);
+        node->visibility = REGION_VISIBLE;
     }
     else
     {
@@ -758,18 +762,28 @@ static void draw_brick_tree_nodes(const BrickTreeNode* node)
         {
             if (!lower_is_clipped)
                 draw_brick_tree_nodes(node->lower_child);
+            else
+                node->lower_child->visibility = REGION_CLIPPED;
 
             if (!upper_is_clipped)
                 draw_brick_tree_nodes(node->upper_child);
+            else
+                node->upper_child->visibility = REGION_CLIPPED;
         }
         else
         {
             if (!upper_is_clipped)
                 draw_brick_tree_nodes(node->upper_child);
+            else
+                node->upper_child->visibility = REGION_CLIPPED;
 
             if (!lower_is_clipped)
                 draw_brick_tree_nodes(node->lower_child);
+            else
+                node->lower_child->visibility = REGION_CLIPPED;
         }
+
+        node->visibility = UNDETERMINED_REGION_VISIBILITY;
     }
 }
 
@@ -811,44 +825,52 @@ static void draw_sub_brick_tree_nodes(SubBrickTreeNode* node)
     if (node->visibility_ratio <= configuration.lower_visibility_threshold)
     {
         // If the sub brick is invisible, stop traversal of this branch
-        node->was_drawn = 0;
+        node->visibility = REGION_INVISIBLE;
         return;
     }
-    else
+
+    // If the sub brick is not sufficiently visible and it has children, traverse these recursively
+    if (node->visibility_ratio < configuration.upper_visibility_threshold && node->lower_child)
     {
-        // If the sub brick is not sufficiently visible and it has children, traverse these recursively
-        if (node->visibility_ratio < configuration.upper_visibility_threshold && node->lower_child)
+        assert(node->upper_child);
+
+        // Sub bricks that are completely clipped away do not have to be drawn
+        const int lower_is_clipped = axis_aligned_box_in_clipped_region(&node->lower_child->spatial_offset, &node->lower_child->spatial_extent);
+        const int upper_is_clipped = axis_aligned_box_in_clipped_region(&node->upper_child->spatial_offset, &node->upper_child->spatial_extent);
+
+        // Make sure to draw the children in the correct order (back to front)
+        if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
         {
-            assert(node->upper_child);
-
-            // Sub bricks that are completely clipped away do not have to be drawn
-            const int lower_is_clipped = axis_aligned_box_in_clipped_region(&node->lower_child->spatial_offset, &node->lower_child->spatial_extent);
-            const int upper_is_clipped = axis_aligned_box_in_clipped_region(&node->upper_child->spatial_offset, &node->upper_child->spatial_extent);
-
-            // Make sure to draw the children in the correct order (back to front)
-            if (get_component_of_vector_from_model_point_to_camera(&node->upper_child->spatial_offset, node->split_axis) >= 0)
-            {
-                if (!lower_is_clipped)
-                    draw_sub_brick_tree_nodes(node->lower_child);
-
-                if (!upper_is_clipped)
-                    draw_sub_brick_tree_nodes(node->upper_child);
-            }
+            if (!lower_is_clipped)
+                draw_sub_brick_tree_nodes(node->lower_child);
             else
-            {
-                if (!upper_is_clipped)
-                    draw_sub_brick_tree_nodes(node->upper_child);
+                node->lower_child->visibility = REGION_CLIPPED;
 
-                if (!lower_is_clipped)
-                    draw_sub_brick_tree_nodes(node->lower_child);
-            }
+            if (!upper_is_clipped)
+                draw_sub_brick_tree_nodes(node->upper_child);
+            else
+                node->upper_child->visibility = REGION_CLIPPED;
         }
         else
         {
-            // If the sub brick is sufficiently visible or is a leaf node, draw it
-            draw_sub_brick(node);
-            node->was_drawn = 1;
+            if (!upper_is_clipped)
+                draw_sub_brick_tree_nodes(node->upper_child);
+            else
+                node->upper_child->visibility = REGION_CLIPPED;
+
+            if (!lower_is_clipped)
+                draw_sub_brick_tree_nodes(node->lower_child);
+            else
+                node->lower_child->visibility = REGION_CLIPPED;
         }
+
+        node->visibility = UNDETERMINED_REGION_VISIBILITY;
+    }
+    else
+    {
+        // If the sub brick is sufficiently visible or is a leaf node, draw it
+        draw_sub_brick(node);
+        node->visibility = REGION_VISIBLE;
     }
 }
 

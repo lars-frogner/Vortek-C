@@ -56,6 +56,7 @@ static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node
 
 static void update_vertex_array_object_for_indicator(Indicator* indicator);
 
+static void draw_brick_edges(const BrickTreeNode* node);
 static void draw_sub_brick_edges(const SubBrickTreeNode* node);
 
 static void destroy_indicator(Indicator* indicator);
@@ -258,11 +259,7 @@ void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field)
     glBindVertexArray(indicator->vertex_array_object_id);
     abort_on_GL_error("Could not bind VAO for drawing");
 
-    for (size_t brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
-    {
-        const Brick* const brick = bricked_field->bricks + brick_idx;
-        draw_sub_brick_edges(brick->tree);
-    }
+    draw_brick_edges(bricked_field->tree);
 
     glBindVertexArray(0);
 
@@ -524,11 +521,35 @@ static void update_vertex_array_object_for_indicator(Indicator* indicator)
     glBindVertexArray(0);
 }
 
+static void draw_brick_edges(const BrickTreeNode* node)
+{
+    assert(node);
+
+    if (node->visibility == REGION_INVISIBLE || node->visibility == REGION_CLIPPED)
+        return;
+
+    if (node->brick)
+    {
+        draw_sub_brick_edges(node->brick->tree);
+    }
+    else
+    {
+        if (node->lower_child)
+            draw_brick_edges(node->lower_child);
+
+        if (node->upper_child)
+            draw_brick_edges(node->upper_child);
+    }
+}
+
 static void draw_sub_brick_edges(const SubBrickTreeNode* node)
 {
     assert(node);
 
-    if (node->was_drawn)
+    if (node->visibility == REGION_INVISIBLE || node->visibility == REGION_CLIPPED)
+        return;
+
+    if (node->visibility == REGION_VISIBLE)
     {
         glDrawElements(GL_LINE_LOOP, 24, GL_UNSIGNED_INT, (GLvoid*)(node->indicator_idx*sizeof(unsigned int)));
         abort_on_GL_error("Could not draw indicator");

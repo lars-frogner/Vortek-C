@@ -390,6 +390,8 @@ static void update_brick_tree_node_visibility_ratios(const TransferFunction* tra
 
         node->visibility_ratio = 0.5f*(node->lower_child->visibility_ratio + node->upper_child->visibility_ratio);
     }
+
+    node->visibility = UNDETERMINED_REGION_VISIBILITY;
 }
 
 static void update_sub_brick_tree_node_visibility_ratios(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node)
@@ -412,7 +414,7 @@ static void update_sub_brick_tree_node_visibility_ratios(const TransferFunction*
         node->visibility_ratio = compute_sub_brick_visibility_ratio(transfer_function, field, node);
     }
 
-    node->was_drawn = 0;
+    node->visibility = UNDETERMINED_REGION_VISIBILITY;
 }
 
 static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer_function, const Field* field, SubBrickTreeNode* node)

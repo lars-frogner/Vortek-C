@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 enum brick_orientation {ORIENTED_ZYX = 0, ORIENTED_XZY = 1, ORIENTED_YXZ = 2};
+enum region_visibility {REGION_VISIBLE, REGION_INVISIBLE, REGION_CLIPPED, UNDETERMINED_REGION_VISIBILITY};
 
 typedef struct BrickTreeNode BrickTreeNode;
 typedef struct SubBrickTreeNode SubBrickTreeNode;
@@ -36,9 +37,11 @@ typedef struct BrickTreeNode
     BrickTreeNode* upper_child;
     Brick* brick;
     unsigned int split_axis;
+    size_t n_children;
     Vector3f spatial_offset;
     Vector3f spatial_extent;
     float visibility_ratio;
+    enum region_visibility visibility;
 } BrickTreeNode;
 
 typedef struct SubBrickTreeNode
@@ -56,7 +59,7 @@ typedef struct SubBrickTreeNode
     Vector3f spatial_offset;
     Vector3f spatial_extent;
     float visibility_ratio;
-    int was_drawn;
+    enum region_visibility visibility;
     size_t indicator_idx;
 } SubBrickTreeNode;
 

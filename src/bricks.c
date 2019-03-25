@@ -368,6 +368,7 @@ static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsig
     BrickTreeNode* node = (BrickTreeNode*)malloc(sizeof(BrickTreeNode));
     node->brick = NULL;
     node->visibility_ratio = 1.0f;
+    node->visibility = UNDETERMINED_REGION_VISIBILITY;
 
     node->split_axis = axis;
 
@@ -395,6 +396,8 @@ static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsig
     copy_vector3f(&node->lower_child->spatial_extent, &node->spatial_extent);
     node->spatial_extent.a[axis] += node->upper_child->spatial_extent.a[axis];
 
+    node->n_children = 2 + node->lower_child->n_children + node->upper_child->n_children;
+
     return node;
 }
 
@@ -405,7 +408,9 @@ static BrickTreeNode* create_brick_tree_leaf_node(BrickedField* bricked_field, N
     BrickTreeNode* node = (BrickTreeNode*)malloc(sizeof(BrickTreeNode));
     node->lower_child = NULL;
     node->upper_child = NULL;
+    node->n_children = 0;
     node->visibility_ratio = 1.0f;
+    node->visibility = UNDETERMINED_REGION_VISIBILITY;
 
     node->brick = bricked_field->bricks + (indices.idx[2]*bricked_field->n_bricks_y + indices.idx[1])*bricked_field->n_bricks_x + indices.idx[0];
 
@@ -507,7 +512,7 @@ static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Fi
                           node->size_z*field->voxel_depth);
 
     node->visibility_ratio = 1.0f;
-    node->was_drawn = 0;
+    node->visibility = UNDETERMINED_REGION_VISIBILITY;
 
     return node;
 }
