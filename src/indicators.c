@@ -8,16 +8,15 @@
 #include "fields.h"
 #include "transformation.h"
 #include "field_textures.h"
+#include "view_aligned_planes.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
-
 
 typedef struct IndicatorVertices
 {
     Vector4f* positions;
     Vector4f* colors;
-    size_t n_vertices;
 } IndicatorVertices;
 
 typedef struct Indicator
@@ -25,9 +24,12 @@ typedef struct Indicator
     DynamicString name;
     IndicatorVertices vertices;
     void* vertex_buffer;
-    size_t vertex_buffer_size;
     unsigned int* index_buffer;
+    size_t n_vertices;
     size_t n_indices;
+    size_t position_buffer_size;
+    size_t color_buffer_size;
+    size_t vertex_buffer_size;
     size_t index_buffer_size;
     GLuint vertex_array_object_id;
     GLuint vertex_buffer_id;
@@ -42,19 +44,21 @@ static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const V
 static Indicator* create_indicator(const DynamicString* name, size_t n_vertices, size_t n_indices);
 static Indicator* get_indicator(const char* name);
 
-static void sync_indicator(Indicator* indicator);
-
 static void initialize_vertex_array_object_for_indicator(Indicator* indicator);
 
 static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, size_t n_indices);
 
-static void set_cube_vertex_positions(IndicatorVertices* vertices, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
+static void set_cube_vertex_positions(Indicator* indicator, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
+static void set_clip_plane_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx);
 static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx);
-static void set_vertex_colors(IndicatorVertices* vertices, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color);
+static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color);
 
 static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx);
 
-static void update_vertex_array_object_for_indicator(Indicator* indicator);
+static void load_buffer_data_for_indicator(Indicator* indicator);
+
+static void update_position_buffer_data_for_indicator(Indicator* indicator);
+static void update_color_buffer_data_for_indicator(Indicator* indicator);
 
 static void draw_brick_edges(const BrickTreeNode* node);
 static void draw_sub_brick_edges(const SubBrickTreeNode* node);
@@ -131,12 +135,12 @@ void add_boundary_indicator_for_bricks(const char* field_texture_name, const Vec
     {
         const Brick* const brick = bricked_field->bricks + brick_idx;
         set_cube_edges(indicator, vertex_idx, &index_idx);
-        set_cube_vertex_positions(&indicator->vertices, &vertex_idx, &brick->spatial_offset, &brick->spatial_extent);
+        set_cube_vertex_positions(indicator, &vertex_idx, &brick->spatial_offset, &brick->spatial_extent);
     }
 
-    set_vertex_colors(&indicator->vertices, 0, indicator->vertices.n_vertices, color);
+    set_vertex_colors(indicator, 0, indicator->n_vertices, color);
 
-    sync_indicator(indicator);
+    load_buffer_data_for_indicator(indicator);
 
     bricked_field->brick_boundaries_indicator_name = indicator->name.chars;
 }
@@ -168,11 +172,44 @@ void add_boundary_indicator_for_sub_bricks(const char* field_texture_name, const
         set_sub_brick_cube_data(indicator, brick->tree, &vertex_idx, &index_idx);
     }
 
-    set_vertex_colors(&indicator->vertices, 0, indicator->vertices.n_vertices, color);
+    set_vertex_colors(indicator, 0, indicator->n_vertices, color);
 
-    sync_indicator(indicator);
+    load_buffer_data_for_indicator(indicator);
 
     bricked_field->sub_brick_boundaries_indicator_name = indicator->name.chars;
+}
+
+const char* add_boundary_indicator_for_clip_plane(unsigned int clip_plane_idx,
+                                                  const Vector3f* normal,
+                                                  float origin_shift,
+                                                  unsigned int back_corner_idx,
+                                                  const Vector4f* color)
+{
+    check(color);
+
+    const DynamicString name = create_string("clip_plane_%d_boundaries", clip_plane_idx);
+    Indicator* const indicator = create_indicator(&name, 6, 6);
+
+    set_clip_plane_positions(indicator, normal, origin_shift, back_corner_idx);
+
+    for (unsigned int index_idx = 0; index_idx < 6; index_idx++)
+        indicator->index_buffer[index_idx] = index_idx;
+
+    set_vertex_colors(indicator, 0, 6, color);
+
+    load_buffer_data_for_indicator(indicator);
+
+    return indicator->name.chars;
+}
+
+void update_clip_plane_boundary_indicator(const char* indicator_name,
+                                          const Vector3f* normal,
+                                          float origin_shift,
+                                          unsigned int back_corner_idx)
+{
+    Indicator* const indicator = get_indicator(indicator_name);
+    set_clip_plane_positions(indicator, normal, origin_shift, back_corner_idx);
+    update_position_buffer_data_for_indicator(indicator);
 }
 
 void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass)
@@ -189,11 +226,11 @@ void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned i
 
     assert(active_shader_program);
     glUseProgram(active_shader_program->id);
-    abort_on_GL_error("Could not use shader program");
+    abort_on_GL_error("Could not use shader program for drawing indicator");
 
     assert(indicator->vertex_array_object_id > 0);
     glBindVertexArray(indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO for drawing");
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
 
     unsigned int face_is_visible[6] = {0};
 
@@ -228,11 +265,11 @@ void draw_brick_boundary_indicator(const BrickedField* bricked_field)
 
     assert(active_shader_program);
     glUseProgram(active_shader_program->id);
-    abort_on_GL_error("Could not use shader program");
+    abort_on_GL_error("Could not use shader program for drawing indicator");
 
     assert(indicator->vertex_array_object_id > 0);
     glBindVertexArray(indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO for drawing");
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
 
     glDrawElements(GL_LINES, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
     abort_on_GL_error("Could not draw indicator");
@@ -257,9 +294,29 @@ void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field)
 
     assert(indicator->vertex_array_object_id > 0);
     glBindVertexArray(indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO for drawing");
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
 
     draw_brick_edges(bricked_field->tree);
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
+void draw_clip_plane_boundary_indicator(const char* indicator_name)
+{
+    Indicator* const indicator = get_indicator(indicator_name);
+
+    assert(active_shader_program);
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program for drawing indicator");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    glDrawElements(GL_LINE_LOOP, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
 
     glBindVertexArray(0);
 
@@ -313,14 +370,14 @@ static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const V
     Indicator* const indicator = create_indicator(&full_name, 8, 24);
 
     size_t vertex_idx = 0;
-    set_cube_vertex_positions(&indicator->vertices, &vertex_idx, lower_corner, extent);
+    set_cube_vertex_positions(indicator, &vertex_idx, lower_corner, extent);
 
     size_t index_idx = 0;
     set_cube_edges(indicator, 0, &index_idx);
 
-    set_vertex_colors(&indicator->vertices, 0, 8, color);
+    set_vertex_colors(indicator, 0, 8, color);
 
-    sync_indicator(indicator);
+    load_buffer_data_for_indicator(indicator);
 
     return indicator->name.chars;
 }
@@ -359,29 +416,24 @@ static Indicator* get_indicator(const char* name)
     return indicator;
 }
 
-static void sync_indicator(Indicator* indicator)
-{
-    update_vertex_array_object_for_indicator(indicator);
-}
-
 static void initialize_vertex_array_object_for_indicator(Indicator* indicator)
 {
     assert(indicator);
 
     // Generate vertex array object for keeping track of vertex attributes
     glGenVertexArrays(1, &indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not generate VAO");
+    abort_on_GL_error("Could not generate VAO for indicator");
 
     glBindVertexArray(indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
+    abort_on_GL_error("Could not bind VAO for indicator");
 
     // Generate buffer object for vertices
     glGenBuffers(1, &indicator->vertex_buffer_id);
-    abort_on_GL_error("Could not generate vertex buffer object");
+    abort_on_GL_error("Could not generate vertex buffer object for indicator");
 
     // Generate buffer object for indices
     glGenBuffers(1, &indicator->index_buffer_id);
-    abort_on_GL_error("Could not generate index buffer object");
+    abort_on_GL_error("Could not generate index buffer object for indicator");
 
     glBindVertexArray(0);
 }
@@ -391,12 +443,14 @@ static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, 
     assert(indicator);
 
     if (indicator->vertex_buffer || indicator->index_buffer)
-        clear_indicator(indicator);
+        print_severe_message("Cannot allocate indicator buffers because they are already allocated.");
 
-    indicator->vertices.n_vertices = n_vertices;
+    indicator->n_vertices = n_vertices;
     indicator->n_indices = n_indices;
 
-    indicator->vertex_buffer_size = 2*n_vertices*sizeof(Vector4f);
+    indicator->position_buffer_size = n_vertices*sizeof(Vector4f);
+    indicator->color_buffer_size = n_vertices*sizeof(Vector4f);
+    indicator->vertex_buffer_size = indicator->position_buffer_size + indicator->color_buffer_size;
     indicator->index_buffer_size = n_indices*sizeof(unsigned int);
 
     indicator->vertex_buffer = malloc(indicator->vertex_buffer_size);
@@ -411,40 +465,53 @@ static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, 
     indicator->vertices.colors = indicator->vertices.positions + n_vertices;
 }
 
-static void set_cube_vertex_positions(IndicatorVertices* vertices, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent)
+static void set_cube_vertex_positions(Indicator* indicator, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent)
 {
-    assert(vertices);
+    assert(indicator);
     assert(running_vertex_idx);
-    assert(*running_vertex_idx + 8 <= vertices->n_vertices);
+    assert(*running_vertex_idx + 8 <= indicator->n_vertices);
     assert(lower_corner);
     assert(extent);
 
     size_t vertex_idx = *running_vertex_idx;
 
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1],                lower_corner->a[2],                1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1],                lower_corner->a[2],                1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1],                lower_corner->a[2],                1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1],                lower_corner->a[2],                1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1] + extent->a[1], lower_corner->a[2],                1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1] + extent->a[1], lower_corner->a[2],                1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1],                lower_corner->a[2] + extent->a[2], 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1],                lower_corner->a[2] + extent->a[2], 1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1],                lower_corner->a[2] + extent->a[2], 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1],                lower_corner->a[2] + extent->a[2], 1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1] + extent->a[1], lower_corner->a[2],                1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1] + extent->a[1], lower_corner->a[2],                1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1] + extent->a[1], lower_corner->a[2] + extent->a[2], 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0],                lower_corner->a[1] + extent->a[1], lower_corner->a[2] + extent->a[2], 1.0f);
     vertex_idx++;
-    set_vector4f_elements(vertices->positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1] + extent->a[1], lower_corner->a[2] + extent->a[2], 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + vertex_idx, lower_corner->a[0] + extent->a[0], lower_corner->a[1] + extent->a[1], lower_corner->a[2] + extent->a[2], 1.0f);
     vertex_idx++;
 
     *running_vertex_idx = vertex_idx;
 }
 
+static void set_clip_plane_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx)
+{
+    assert(indicator);
+    assert(normal);
+
+    for (unsigned int vertex_idx = 0; vertex_idx < 6; vertex_idx++)
+        compute_plane_bounding_box_intersection_vertex(normal,
+                                                       origin_shift,
+                                                       back_corner_idx,
+                                                       vertex_idx,
+                                                       indicator->vertices.positions + vertex_idx);
+}
+
 static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx)
 {
     assert(indicator);
-    assert(start_vertex_idx + 8 <= indicator->vertices.n_vertices);
+    assert(start_vertex_idx + 8 <= indicator->n_vertices);
     assert(running_index_idx);
     assert(*running_index_idx + 24 <= indicator->n_indices);
 
@@ -458,14 +525,14 @@ static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t
     *running_index_idx = start_index_idx + 24;
 }
 
-static void set_vertex_colors(IndicatorVertices* vertices, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color)
+static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color)
 {
-    assert(vertices);
-    assert(start_vertex_idx + n_vertices <= vertices->n_vertices);
+    assert(indicator);
+    assert(start_vertex_idx + n_vertices <= indicator->n_vertices);
     assert(color);
 
     for (size_t vertex_idx = start_vertex_idx; vertex_idx < start_vertex_idx + n_vertices; vertex_idx++)
-        copy_vector4f(color, vertices->colors + vertex_idx);
+        indicator->vertices.colors[vertex_idx] = *color;
 }
 
 static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx)
@@ -483,10 +550,10 @@ static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node
 
     node->indicator_idx = *running_index_idx;
     set_cube_edges(indicator, *running_vertex_idx, running_index_idx);
-    set_cube_vertex_positions(&indicator->vertices, running_vertex_idx, &node->spatial_offset, &node->spatial_extent);
+    set_cube_vertex_positions(indicator, running_vertex_idx, &node->spatial_offset, &node->spatial_extent);
 }
 
-static void update_vertex_array_object_for_indicator(Indicator* indicator)
+static void load_buffer_data_for_indicator(Indicator* indicator)
 {
     assert(indicator);
     assert(indicator->vertex_buffer);
@@ -496,27 +563,61 @@ static void update_vertex_array_object_for_indicator(Indicator* indicator)
     assert(indicator->index_buffer_id > 0);
 
     glBindVertexArray(indicator->vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
+    abort_on_GL_error("Could not bind VAO for indicator");
 
     // Store buffer of all vertices on device
     glBindBuffer(GL_ARRAY_BUFFER, indicator->vertex_buffer_id);
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)indicator->vertex_buffer_size, (GLvoid*)indicator->vertex_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind VBO to VAO");
+    abort_on_GL_error("Could not load vertex buffer data for indicator");
 
     // Specify vertex attribute pointer for vertex positions
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)0);
     glEnableVertexAttribArray(0);
-    abort_on_GL_error("Could not set VAO vertex index attributes");
+    abort_on_GL_error("Could not set position vertex attribute pointer for indicator");
 
     // Specify vertex attribute pointer for vertex colors
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(sizeof(Vector4f)*indicator->vertices.n_vertices));
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (GLvoid*)(sizeof(Vector4f)*indicator->n_vertices));
     glEnableVertexAttribArray(1);
-    abort_on_GL_error("Could not set VAO plane index attributes");
+    abort_on_GL_error("Could not set color vertex attribute pointer for indicator");
 
     // Store buffer of all edge indices on device
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indicator->index_buffer_id);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)indicator->index_buffer_size, (GLvoid*)indicator->index_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind IBO to VAO");
+    abort_on_GL_error("Could not load index buffer data for indicator");
+
+    glBindVertexArray(0);
+}
+
+static void update_position_buffer_data_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
+    assert(indicator->vertex_buffer);
+    assert(indicator->vertex_array_object_id > 0);
+    assert(indicator->vertex_buffer_id > 0);
+
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for indicator");
+
+    glBindBuffer(GL_ARRAY_BUFFER, indicator->vertex_buffer_id);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)indicator->position_buffer_size, (GLvoid*)indicator->vertices.positions);
+    abort_on_GL_error("Could not update position buffer data for indicator");
+
+    glBindVertexArray(0);
+}
+
+static void update_color_buffer_data_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
+    assert(indicator->vertex_buffer);
+    assert(indicator->vertex_array_object_id > 0);
+    assert(indicator->vertex_buffer_id > 0);
+
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for indicator");
+
+    glBindBuffer(GL_ARRAY_BUFFER, indicator->vertex_buffer_id);
+    glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)indicator->position_buffer_size, (GLsizeiptr)indicator->color_buffer_size, (GLvoid*)indicator->vertices.colors);
+    abort_on_GL_error("Could not update color buffer data for indicator");
 
     glBindVertexArray(0);
 }
@@ -584,7 +685,7 @@ static void destroy_vertex_array_object_for_indicator(Indicator* indicator)
     if (indicator->vertex_array_object_id != 0)
         glDeleteVertexArrays(1, &indicator->vertex_array_object_id);
 
-    abort_on_GL_error("Could not destroy buffer objects");
+    abort_on_GL_error("Could not destroy buffer objects for indicator");
 }
 
 static void clear_indicator(Indicator* indicator)
@@ -606,9 +707,11 @@ static void reset_indicator_attributes(Indicator* indicator)
 
     indicator->vertices.positions = NULL;
     indicator->vertices.colors = NULL;
-    indicator->vertices.n_vertices = 0;
 
     indicator->vertex_buffer = NULL;
+    indicator->n_vertices = 0;
+    indicator->position_buffer_size = 0;
+    indicator->color_buffer_size = 0;
     indicator->vertex_buffer_size = 0;
 
     indicator->index_buffer = NULL;
