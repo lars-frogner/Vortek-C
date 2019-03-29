@@ -162,34 +162,6 @@ void set_vector4f_elements(Vector4f* v, float x, float y, float z, float w)
     v->a[3] = w;
 }
 
-void copy_vector3(const Vector3* source, Vector3* destination)
-{
-    assert(source);
-    assert(destination);
-    destination->a[0] = source->a[0];
-    destination->a[1] = source->a[1];
-    destination->a[2] = source->a[2];
-}
-
-void copy_vector3f(const Vector3f* source, Vector3f* destination)
-{
-    assert(source);
-    assert(destination);
-    destination->a[0] = source->a[0];
-    destination->a[1] = source->a[1];
-    destination->a[2] = source->a[2];
-}
-
-void copy_vector4f(const Vector4f* source, Vector4f* destination)
-{
-    assert(source);
-    assert(destination);
-    destination->a[0] = source->a[0];
-    destination->a[1] = source->a[1];
-    destination->a[2] = source->a[2];
-    destination->a[3] = source->a[3];
-}
-
 void copy_vector3_to_vector3f(const Vector3* source, Vector3f* destination)
 {
     assert(source);
@@ -223,7 +195,7 @@ int equal_vector3f(const Vector3f* v1, const Vector3f* v2)
     return (v1->a[0] == v2->a[0]) && (v1->a[1] == v2->a[1]) && (v1->a[2] == v2->a[2]);
 }
 
-Vector3 add_vector3(const Vector3* v1, const Vector3* v2)
+Vector3 added_vector3(const Vector3* v1, const Vector3* v2)
 {
     assert(v1);
     assert(v2);
@@ -231,7 +203,7 @@ Vector3 add_vector3(const Vector3* v1, const Vector3* v2)
     return result;
 }
 
-Vector3 subtract_vector3(const Vector3* v1, const Vector3* v2)
+Vector3 subtracted_vector3(const Vector3* v1, const Vector3* v2)
 {
     assert(v1);
     assert(v2);
@@ -239,7 +211,7 @@ Vector3 subtract_vector3(const Vector3* v1, const Vector3* v2)
     return result;
 }
 
-Vector3 multiply_vector3(const Vector3* v1, const Vector3* v2)
+Vector3 multiplied_vector3(const Vector3* v1, const Vector3* v2)
 {
     assert(v1);
     assert(v2);
@@ -247,14 +219,49 @@ Vector3 multiply_vector3(const Vector3* v1, const Vector3* v2)
     return result;
 }
 
-Vector3 scale_vector3(const Vector3* v, double scale)
+Vector3 scaled_vector3(const Vector3* v, double scale)
 {
     assert(v);
     Vector3 result = {{scale*v->a[0], scale*v->a[1], scale*v->a[2]}};
     return result;
 }
 
-Vector3f add_vector3f(const Vector3f* v1, const Vector3f* v2)
+void add_vector3(const Vector3* v1, Vector3* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] += v1->a[0];
+    v2->a[1] += v1->a[1];
+    v2->a[2] += v1->a[2];
+}
+
+void subtract_vector3(const Vector3* v1, Vector3* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] -= v1->a[0];
+    v2->a[1] -= v1->a[1];
+    v2->a[2] -= v1->a[2];
+}
+
+void multiply_vector3(const Vector3* v1, Vector3* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] *= v1->a[0];
+    v2->a[1] *= v1->a[1];
+    v2->a[2] *= v1->a[2];
+}
+
+void scale_vector3(Vector3* v, double scale)
+{
+    assert(v);
+    v->a[0] *= scale;
+    v->a[1] *= scale;
+    v->a[2] *= scale;
+}
+
+Vector3f added_vector3f(const Vector3f* v1, const Vector3f* v2)
 {
     assert(v1);
     assert(v2);
@@ -262,7 +269,7 @@ Vector3f add_vector3f(const Vector3f* v1, const Vector3f* v2)
     return result;
 }
 
-Vector3f subtract_vector3f(const Vector3f* v1, const Vector3f* v2)
+Vector3f subtracted_vector3f(const Vector3f* v1, const Vector3f* v2)
 {
     assert(v1);
     assert(v2);
@@ -270,7 +277,7 @@ Vector3f subtract_vector3f(const Vector3f* v1, const Vector3f* v2)
     return result;
 }
 
-Vector3f multiply_vector3f(const Vector3f* v1, const Vector3f* v2)
+Vector3f multiplied_vector3f(const Vector3f* v1, const Vector3f* v2)
 {
     assert(v1);
     assert(v2);
@@ -278,11 +285,46 @@ Vector3f multiply_vector3f(const Vector3f* v1, const Vector3f* v2)
     return result;
 }
 
-Vector3f scale_vector3f(const Vector3f* v, float scale)
+Vector3f scaled_vector3f(const Vector3f* v, float scale)
 {
     assert(v);
     Vector3f result = {{scale*v->a[0], scale*v->a[1], scale*v->a[2]}};
     return result;
+}
+
+void add_vector3f(const Vector3f* v1, Vector3f* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] += v1->a[0];
+    v2->a[1] += v1->a[1];
+    v2->a[2] += v1->a[2];
+}
+
+void subtract_vector3f(const Vector3f* v1, Vector3f* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] -= v1->a[0];
+    v2->a[1] -= v1->a[1];
+    v2->a[2] -= v1->a[2];
+}
+
+void multiply_vector3f(const Vector3f* v1, Vector3f* v2)
+{
+    assert(v1);
+    assert(v2);
+    v2->a[0] *= v1->a[0];
+    v2->a[1] *= v1->a[1];
+    v2->a[2] *= v1->a[2];
+}
+
+void scale_vector3f(Vector3f* v, float scale)
+{
+    assert(v);
+    v->a[0] *= scale;
+    v->a[1] *= scale;
+    v->a[2] *= scale;
 }
 
 double norm3(const Vector3* v)
@@ -380,11 +422,37 @@ Vector3f multiply_matrix4f_vector3f(const Matrix4f* m, const Vector3f* v)
     return result;
 }
 
-float multiply_matrix4f_vector3f_z_only(const Matrix4f* m, const Vector3f* v)
+Vector3f multiply_matrix4f_sub_3x3_vector3f(const Matrix4f* m, const Vector3f* v)
 {
     assert(m);
     assert(v);
-    return m->a[8]*v->a[0] + m->a[9]*v->a[1] + m->a[10]*v->a[2] + m->a[11];
+    Vector3f result;
+    result.a[0] = m->a[ 0]*v->a[0] + m->a[ 1]*v->a[1] + m->a[ 2]*v->a[2];
+    result.a[1] = m->a[ 4]*v->a[0] + m->a[ 5]*v->a[1] + m->a[ 6]*v->a[2];
+    result.a[2] = m->a[ 8]*v->a[0] + m->a[ 9]*v->a[1] + m->a[10]*v->a[2];
+    return result;
+}
+
+Vector3 multiply_matrix4f_vector3(const Matrix4f* m, const Vector3* v)
+{
+    assert(m);
+    assert(v);
+    Vector3 result;
+    result.a[0] = m->a[ 0]*v->a[0] + m->a[ 1]*v->a[1] + m->a[ 2]*v->a[2] + m->a[ 3];
+    result.a[1] = m->a[ 4]*v->a[0] + m->a[ 5]*v->a[1] + m->a[ 6]*v->a[2] + m->a[ 7];
+    result.a[2] = m->a[ 8]*v->a[0] + m->a[ 9]*v->a[1] + m->a[10]*v->a[2] + m->a[11];
+    return result;
+}
+
+Vector3 multiply_matrix4f_sub_3x3_vector3(const Matrix4f* m, const Vector3* v)
+{
+    assert(m);
+    assert(v);
+    Vector3 result;
+    result.a[0] = m->a[ 0]*v->a[0] + m->a[ 1]*v->a[1] + m->a[ 2]*v->a[2];
+    result.a[1] = m->a[ 4]*v->a[0] + m->a[ 5]*v->a[1] + m->a[ 6]*v->a[2];
+    result.a[2] = m->a[ 8]*v->a[0] + m->a[ 9]*v->a[1] + m->a[10]*v->a[2];
+    return result;
 }
 
 void invert_matrix4f(Matrix4f* m)
@@ -573,6 +641,37 @@ void invert_matrix4f_3x3_submatrix(Matrix4f* m)
     m->a[ 8] =               diff3*inv_det;
     m->a[ 9] = (a12*a31 - a11*a32)*inv_det;
     m->a[10] = (a11*a22 - a12*a21)*inv_det;
+}
+
+void transpose_matrix4f(Matrix4f* m)
+{
+    assert(m);
+
+    float swap;
+
+    swap = m->a[1];
+    m->a[1] = m->a[4];
+    m->a[4] = swap;
+
+    swap = m->a[2];
+    m->a[2] = m->a[8];
+    m->a[8] = swap;
+
+    swap = m->a[3];
+    m->a[3] = m->a[12];
+    m->a[12] = swap;
+
+    swap = m->a[6];
+    m->a[6] = m->a[9];
+    m->a[9] = swap;
+
+    swap = m->a[7];
+    m->a[7] = m->a[13];
+    m->a[13] = swap;
+
+    swap = m->a[11];
+    m->a[11] = m->a[14];
+    m->a[14] = swap;
 }
 
 void normalize_vector3(Vector3* v)
@@ -959,6 +1058,16 @@ void rotate_vector3f_about_axis(Vector3f* vector, const Vector3f* axis, float an
     assert(axis);
 
     const Matrix4f rotation_matrix = create_rotation_about_axis_transform(axis, angle);
-    const Vector3f rotated_vector = multiply_matrix4f_vector3f(&rotation_matrix, vector);
-    copy_vector3f(&rotated_vector, vector);
+    *vector = multiply_matrix4f_vector3f(&rotation_matrix, vector);
+}
+
+void rotate_normal3f_about_axis(Vector3f* vector, const Vector3f* axis, float angle)
+{
+    assert(vector);
+    assert(axis);
+
+    Matrix4f rotation_matrix = create_rotation_about_axis_transform(axis, angle);
+    transpose_matrix4f(&rotation_matrix);
+    invert_matrix4f(&rotation_matrix);
+    *vector = multiply_matrix4f_vector3f(&rotation_matrix, vector);
 }
