@@ -388,12 +388,12 @@ static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsig
 
     // The spatial offset of the node along the split axis is the minimum of the children's offset along that axis.
     // The other components of the offset are equal for both children and also the same for this node.
-    copy_vector3f(&node->lower_child->spatial_offset, &node->spatial_offset);
+    node->spatial_offset = node->lower_child->spatial_offset;
     node->spatial_offset.a[axis] = fminf(node->lower_child->spatial_offset.a[axis], node->upper_child->spatial_offset.a[axis]);
 
     // The spatial extent of the node along the split axis is the sum of the children's extent along that axis.
     // The other components of the extent are equal for both children and also the same for this node.
-    copy_vector3f(&node->lower_child->spatial_extent, &node->spatial_extent);
+    node->spatial_extent = node->lower_child->spatial_extent;
     node->spatial_extent.a[axis] += node->upper_child->spatial_extent.a[axis];
 
     node->n_children = 2 + node->lower_child->n_children + node->upper_child->n_children;
@@ -414,8 +414,8 @@ static BrickTreeNode* create_brick_tree_leaf_node(BrickedField* bricked_field, N
 
     node->brick = bricked_field->bricks + (indices.idx[2]*bricked_field->n_bricks_y + indices.idx[1])*bricked_field->n_bricks_x + indices.idx[0];
 
-    copy_vector3f(&node->brick->spatial_offset, &node->spatial_offset);
-    copy_vector3f(&node->brick->spatial_extent, &node->spatial_extent);
+    node->spatial_offset = node->brick->spatial_offset;
+    node->spatial_extent = node->brick->spatial_extent;
 
     create_sub_brick_tree(node->brick, bricked_field->field);
 
