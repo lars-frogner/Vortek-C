@@ -4,6 +4,7 @@
 #include "error.h"
 #include "fields.h"
 #include "shaders.h"
+#include "trackball.h"
 #include "transformation.h"
 #include "indicators.h"
 #include "texture.h"
@@ -12,13 +13,8 @@
 #include "view_aligned_planes.h"
 #include "clip_planes.h"
 #include "shader_generator.h"
+#include "window.h"
 
-
-typedef struct WindowShape
-{
-    int width;
-    int height;
-} WindowShape;
 
 typedef struct SingleFieldRenderingState
 {
@@ -31,8 +27,6 @@ static void initialize_rendering_settings(void);
 static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state);
 static void post_initialize_single_field_rendering(SingleFieldRenderingState* state);
 
-
-static WindowShape window_shape;
 
 static ShaderProgram rendering_shader_program;
 static ShaderProgram indicator_shader_program;
@@ -60,6 +54,7 @@ void initialize_renderer(void)
 
     initialize_rendering_settings();
     initialize_fields();
+    initialize_trackball();
     initialize_transformation();
     initialize_planes();
     initialize_clip_planes();
@@ -81,6 +76,10 @@ void initialize_renderer(void)
 
     post_initialize_single_field_rendering(&single_field_rendering_state);
 
+    int width, height;
+    get_window_shape_in_pixels(&width, &height);
+    glViewport(0, 0, width, height);
+
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
@@ -98,28 +97,18 @@ void cleanup_renderer(void)
     destroy_shader_program(&rendering_shader_program);
 }
 
-void update_renderer_window_size_in_pixels(int width, int height)
-{
-    assert(width > 0);
-    assert(height > 0);
-
-    window_shape.width = width;
-    window_shape.height = height;
-
-    glViewport(0, 0, width, height);
-}
-
 void renderer_update_callback(void)
 {
     glClear(GL_COLOR_BUFFER_BIT);
 
     draw_active_bricked_field();
+    draw_clip_planes();
 }
 
 void renderer_resize_callback(int width, int height)
 {
-    update_renderer_window_size_in_pixels(width, height);
     update_camera_aspect_ratio((float)width/height);
+    glViewport(0, 0, width, height);
 }
 
 static void initialize_rendering_settings(void)
@@ -157,6 +146,8 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     state->texture_name = create_scalar_field_texture(field, 6, 2);
     state->TF_name = create_transfer_function();
 
+    set_active_bricked_field(get_texture_bricked_field(state->texture_name));
+
     Vector4f field_boundary_color = {{1.0f, 1.0f, 1.0f, 0.15f}};
     Vector4f brick_boundary_color = {{0.0f, 1.0f, 0.0f, 0.15f}};
     Vector4f sub_brick_boundary_color = {{0.0f, 0.0f, 1.0f, 0.15f}};
@@ -191,9 +182,8 @@ static void post_initialize_single_field_rendering(SingleFieldRenderingState* st
 
     set_view_distance(2.0f);
 
-    update_camera_properties(60.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, PERSPECTIVE_PROJECTION);
+    update_camera_properties(60.0f, get_window_aspect_ratio(), 0.01f, 100.0f, PERSPECTIVE_PROJECTION);
     //update_camera_properties(2.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, ORTHOGRAPHIC_PROJECTION);
 
-    set_active_bricked_field(get_texture_bricked_field(state->texture_name));
     set_plane_separation(0.5f);
 }
