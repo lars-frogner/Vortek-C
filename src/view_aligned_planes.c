@@ -369,7 +369,7 @@ unsigned int get_axis_aligned_box_front_corner_for_plane(const Vector3f* plane_n
     return front_corners[plane_normal->a[0] < 0][plane_normal->a[1] < 0][plane_normal->a[2] < 0];
 }
 
-void draw_active_bricked_field()
+void draw_active_bricked_field(void)
 {
     const BrickedField* const bricked_field = active_bricked_field.bricked_field;
 
@@ -389,15 +389,15 @@ void draw_active_bricked_field()
     BrickTreeNode* node = bricked_field->tree;
 
     glUseProgram(active_shader_program->id);
-    abort_on_GL_error("Could not use shader program");
+    abort_on_GL_error("Could not use shader program for drawing bricked field");
 
     glUniform1ui(back_corner_idx_uniform.location, (GLuint)active_bricked_field.current_back_corner_idx);
 
     glBindVertexArray(plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO for drawing");
+    abort_on_GL_error("Could not bind VAO for drawing bricked field");
 
     glActiveTexture(GL_TEXTURE0);
-    abort_on_GL_error("Could not set active texture unit");
+    abort_on_GL_error("Could not set active texture unit for drawing bricked field");
 
     draw_brick_tree_nodes(node);
 
@@ -416,6 +416,62 @@ void draw_active_bricked_field()
 
     active_bricked_field.current_look_axis = NULL;
     active_bricked_field.current_camera_position = NULL;
+}
+
+void compute_plane_bounding_box_intersection_vertex(const Vector3f* plane_normal,
+                                                    float origin_shift,
+                                                    unsigned int back_corner_idx,
+                                                    unsigned int vertex_idx,
+                                                    Vector4f* intersection_position)
+{
+    check(plane_normal);
+    check(back_corner_idx < 8);
+    check(vertex_idx < 6);
+    check(intersection_position);
+
+    const BrickedField* const bricked_field = active_bricked_field.bricked_field;
+    check(bricked_field);
+
+    unsigned int edge_idx;
+    unsigned int edge_start_idx;
+    unsigned int edge_end_idx;
+    Vector3f edge_start;
+    Vector3f edge_end;
+    Vector3f edge_origin;
+    Vector3f edge_vector;
+    float denom;
+    float lambda;
+    Vector3f position;
+
+    for (edge_idx = 0; edge_idx < 4; edge_idx++)
+    {
+        edge_start_idx = edge_starts[(4*vertex_idx) + edge_idx];
+        edge_end_idx   =   edge_ends[(4*vertex_idx) + edge_idx];
+
+        const Vector3f* const start_corner = corners + corner_permutations[(8*back_corner_idx) + edge_start_idx];
+        const Vector3f* const end_corner   = corners + corner_permutations[(8*back_corner_idx) + edge_end_idx];
+
+        edge_start = multiplied_vector3f(&bricked_field->tree->spatial_extent, start_corner);
+        edge_end   = multiplied_vector3f(&bricked_field->tree->spatial_extent, end_corner);
+
+        edge_origin = added_vector3f(&edge_start, &bricked_field->tree->spatial_offset);
+        edge_vector = subtracted_vector3f(&edge_end, &edge_start);
+
+        denom = dot3f(&edge_vector, plane_normal);
+        lambda = (denom != 0.0f) ? (origin_shift - dot3f(&edge_origin, plane_normal))/denom : -1.0f;
+
+        if (lambda >= 0.0f && lambda <= 1.0f)
+        {
+            position = edge_vector;
+            scale_vector3f(&position, lambda);
+            add_vector3f(&edge_origin, &position);
+            copy_vector3f_to_vector4f(&position, intersection_position);
+            return;
+        }
+    }
+
+    // If no intersection was found, we set the position to the origin
+    set_vector4f_elements(intersection_position, 0.0f, 0.0f, 0.0f, 1.0f);
 }
 
 void cleanup_planes(void)
@@ -459,18 +515,18 @@ static void initialize_vertex_array_object(void)
 {
     // Generate vertex array object for keeping track of vertex attributes
     glGenVertexArrays(1, &plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not generate VAO");
+    abort_on_GL_error("Could not generate VAO for view aligned planes");
 
     glBindVertexArray(plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
+    abort_on_GL_error("Could not bind VAO for view aligned planes");
 
     // Generate buffer object for vertices
     glGenBuffers(1, &plane_stack.vertex_buffer_id);
-    abort_on_GL_error("Could not generate vertex buffer object");
+    abort_on_GL_error("Could not generate vertex buffer object for view aligned planes");
 
     // Generate buffer object for face indices
     glGenBuffers(1, &plane_stack.face_buffer_id);
-    abort_on_GL_error("Could not generate face buffer object");
+    abort_on_GL_error("Could not generate face buffer object for view aligned planes");
 
     glBindVertexArray(0);
 }
@@ -550,27 +606,27 @@ static void update_vertex_array_object(void)
     assert(plane_stack.face_buffer_id > 0);
 
     glBindVertexArray(plane_stack.vertex_array_object_id);
-    abort_on_GL_error("Could not bind VAO");
+    abort_on_GL_error("Could not bind VAO for view aligned planes");
 
     // Store buffer of all vertices on device
     glBindBuffer(GL_ARRAY_BUFFER, plane_stack.vertex_buffer_id);
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)plane_stack.vertex_buffer_size, (GLvoid*)plane_stack.vertex_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind VBO to VAO");
+    abort_on_GL_error("Could load vertex buffer data for view aligned planes");
 
     // Specify vertex attribute pointer for vertex indices
     glVertexAttribIPointer(0, 1, GL_UNSIGNED_INT, sizeof(PlaneVertex), (GLvoid*)0);
     glEnableVertexAttribArray(0);
-    abort_on_GL_error("Could not set VAO vertex index attributes");
+    abort_on_GL_error("Could not set vertex index attribute pointer for view aligned planes");
 
     // Specify vertex attribute pointer for plane indices
     glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, sizeof(PlaneVertex), (GLvoid*)sizeof(GLuint));
     glEnableVertexAttribArray(1);
-    abort_on_GL_error("Could not set VAO plane index attributes");
+    abort_on_GL_error("Could not set plane index attribute pointer for view aligned planes");
 
     // Store buffer of all face indices on device
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, plane_stack.face_buffer_id);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)plane_stack.face_buffer_size, (GLvoid*)plane_stack.face_buffer, GL_STATIC_DRAW);
-    abort_on_GL_error("Could not bind IBO to VAO");
+    abort_on_GL_error("Could not load face buffer data for view aligned planes");
 
     glBindVertexArray(0);
 }
@@ -630,21 +686,29 @@ static void generate_shader_code_for_planes(void)
     DynamicString position_code = create_string(
       "    float plane_dist = %s + %s*%s;"
     "\n"
+    "\n    uint edge_start_idx;"
+    "\n    uint edge_end_idx;"
+    "\n    vec3 edge_start;"
+    "\n    vec3 edge_end;"
+    "\n    vec3 edge_origin;"
+    "\n    vec3 edge_vector;"
+    "\n    float denom;"
+    "\n    float lambda;"
     "\n    vec4 position;"
     "\n"
     "\n    for (uint edge_idx = 0; edge_idx < 4; edge_idx++)"
     "\n    {"
-    "\n        uint edge_start_idx = %s[4*vertex_idx + edge_idx];"
-    "\n        uint edge_end_idx   =   %s[4*vertex_idx + edge_idx];"
+    "\n        edge_start_idx = %s[(4*vertex_idx) + edge_idx];"
+    "\n        edge_end_idx   =   %s[(4*vertex_idx) + edge_idx];"
     "\n"
-    "\n        vec3 edge_start = %s*%s[%s[8*%s + edge_start_idx]];"
-    "\n        vec3 edge_end   = %s*%s[%s[8*%s + edge_end_idx]];"
+    "\n        edge_start = %s*%s[%s[(8*%s) + edge_start_idx]];"
+    "\n        edge_end   = %s*%s[%s[(8*%s) + edge_end_idx]];"
     "\n"
-    "\n        vec3 edge_origin = edge_start + %s;"
-    "\n        vec3 edge_vector = edge_end - edge_start;"
+    "\n        edge_origin = edge_start + %s;"
+    "\n        edge_vector = edge_end - edge_start;"
     "\n"
-    "\n        float denom = dot(edge_vector, %s);"
-    "\n        float lambda = (denom != 0.0) ? (plane_dist - dot(edge_origin, %s))/denom : -1.0;"
+    "\n        denom = dot(edge_vector, %s);"
+    "\n        lambda = (denom != 0.0) ? (plane_dist - dot(edge_origin, %s))/denom : -1.0;"
     "\n"
     "\n        if (lambda >= 0.0 && lambda <= 1.0)"
     "\n        {"
@@ -813,7 +877,7 @@ static void draw_brick(const Brick* brick)
                 brick->pad_fractions.a[2]);
 
     glBindTexture(GL_TEXTURE_3D, brick->texture_id);
-    abort_on_GL_error("Could not bind 3D texture");
+    abort_on_GL_error("Could not bind 3D texture for drawing brick");
 
     draw_sub_brick_tree_nodes(brick->tree);
 }
@@ -909,10 +973,10 @@ static void draw_sub_brick(const SubBrickTreeNode* node)
 
     const float plane_dist_offset = dot3f(&node->spatial_offset, active_bricked_field.current_look_axis);
 
-    const Vector3f scaled_back_corner = multiply_vector3f(corners + active_bricked_field.current_back_corner_idx, &node->spatial_extent);
+    const Vector3f scaled_back_corner = multiplied_vector3f(corners + active_bricked_field.current_back_corner_idx, &node->spatial_extent);
     float back_plane_dist = dot3f(&scaled_back_corner, active_bricked_field.current_look_axis) + plane_dist_offset;
 
-    const Vector3f scaled_front_corner = multiply_vector3f(corners + active_bricked_field.current_front_corner_idx, &node->spatial_extent);
+    const Vector3f scaled_front_corner = multiplied_vector3f(corners + active_bricked_field.current_front_corner_idx, &node->spatial_extent);
     float front_plane_dist = dot3f(&scaled_front_corner, active_bricked_field.current_look_axis) + plane_dist_offset;
 
     // Offset start distance by half a plane spacing so that the first plane gets a non-zero area
@@ -973,7 +1037,7 @@ static void destroy_vertex_array_object(void)
     if (plane_stack.vertex_array_object_id != 0)
         glDeleteVertexArrays(1, &plane_stack.vertex_array_object_id);
 
-    abort_on_GL_error("Could not destroy buffer objects");
+    abort_on_GL_error("Could not destroy buffer objects for view aligned planes");
 }
 
 static void clear_plane_stack(void)

@@ -31,6 +31,12 @@ unsigned int get_axis_aligned_box_front_corner_for_plane(const Vector3f* plane_n
 
 void draw_active_bricked_field(void);
 
+void compute_plane_bounding_box_intersection_vertex(const Vector3f* plane_normal,
+                                                    float origin_shift,
+                                                    unsigned int back_corner_idx,
+                                                    unsigned int vertex_idx,
+                                                    Vector4f* intersection_position);
+
 void cleanup_planes(void);
 
 #endif
