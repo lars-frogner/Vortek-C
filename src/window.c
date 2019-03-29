@@ -12,6 +12,8 @@
 #include <GLFW/glfw3.h>
 
 
+#define GLFW_MOD_NONE 0
+
 #define WINDOW_TITLE "Vortek"
 #define DEFAULT_WINDOW_HEIGHT_FRACTION 0.6f
 #define DEFAULT_WINDOW_ASPECT_RATIO 1.0f
@@ -277,19 +279,64 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 }
                 break;
             }
+            case GLFW_KEY_X:
+            {
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    clip_plane_control_set_normal_to_x_axis_callback();
+                }
+                break;
+            }
+            case GLFW_KEY_Y:
+            {
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    clip_plane_control_set_normal_to_y_axis_callback();
+                }
+                break;
+            }
+            case GLFW_KEY_Z:
+            {
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    clip_plane_control_set_normal_to_z_axis_callback();
+                }
+                break;
+            }
+            case GLFW_KEY_V:
+            {
+                if (mods == GLFW_MOD_SHIFT)
+                {
+                    clip_plane_control_set_normal_to_look_axis_callback();
+                }
+                break;
+            }
             case GLFW_KEY_O:
             {
-                toggle_field_outline_drawing();
+                if (mods == GLFW_MOD_NONE)
+                {
+                    toggle_field_outline_drawing();
+                }
+                else if (mods == GLFW_MOD_SHIFT)
+                {
+                    clip_plane_control_reset_origin_shift_callback();
+                }
                 break;
             }
             case GLFW_KEY_B:
             {
-                toggle_brick_outline_drawing();
+                if (mods == GLFW_MOD_NONE)
+                {
+                    toggle_brick_outline_drawing();
+                }
                 break;
             }
             case GLFW_KEY_T:
             {
-                toggle_sub_brick_outline_drawing();
+                if (mods == GLFW_MOD_NONE)
+                {
+                    toggle_sub_brick_outline_drawing();
+                }
                 break;
             }
             default:
