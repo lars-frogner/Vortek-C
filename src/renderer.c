@@ -2,8 +2,9 @@
 
 #include "gl_includes.h"
 #include "error.h"
+#include "geometry.h"
+#include "colors.h"
 #include "fields.h"
-#include "shaders.h"
 #include "trackball.h"
 #include "transformation.h"
 #include "indicators.h"
@@ -13,6 +14,7 @@
 #include "view_aligned_planes.h"
 #include "clip_planes.h"
 #include "shader_generator.h"
+#include "shaders.h"
 #include "window.h"
 
 
@@ -126,6 +128,8 @@ static void initialize_rendering_settings(void)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     abort_on_GL_error("Could not set blending options");
+
+    glPointSize(5.0f);
 }
 
 static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state)
@@ -148,9 +152,9 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
 
     set_active_bricked_field(get_texture_bricked_field(state->texture_name));
 
-    Vector4f field_boundary_color = {{1.0f, 1.0f, 1.0f, 0.15f}};
-    Vector4f brick_boundary_color = {{0.0f, 1.0f, 0.0f, 0.15f}};
-    Vector4f sub_brick_boundary_color = {{0.0f, 0.0f, 1.0f, 0.15f}};
+    const Color field_boundary_color = create_standard_color(COLOR_WHITE, 0.15f);
+    const Color brick_boundary_color = create_standard_color(COLOR_GREEN, 0.15f);
+    const Color sub_brick_boundary_color = create_standard_color(COLOR_BLUE, 0.15f);
     add_boundary_indicator_for_field(state->texture_name, &field_boundary_color);
     add_boundary_indicator_for_bricks(state->texture_name, &brick_boundary_color);
     add_boundary_indicator_for_sub_bricks(state->texture_name, &sub_brick_boundary_color);
