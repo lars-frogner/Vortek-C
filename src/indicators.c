@@ -16,7 +16,7 @@
 typedef struct IndicatorVertices
 {
     Vector4f* positions;
-    Vector4f* colors;
+    Color* colors;
 } IndicatorVertices;
 
 typedef struct Indicator
@@ -39,7 +39,7 @@ typedef struct Indicator
 
 static void generate_shader_code_for_indicators(void);
 
-static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Vector4f* color, const char* name, ...);
+static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Color* color, const char* name, ...);
 
 static Indicator* create_indicator(const DynamicString* name, size_t n_vertices, size_t n_indices);
 static Indicator* get_indicator(const char* name);
@@ -49,14 +49,16 @@ static void initialize_vertex_array_object_for_indicator(Indicator* indicator);
 static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, size_t n_indices);
 
 static void set_cube_vertex_positions(Indicator* indicator, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
-static void set_clip_plane_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx);
+static void set_clip_plane_boundary_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx);
+static void set_clip_plane_normal_vertices(Indicator* indicator, const Vector3f* normal, float origin_shift, const Color* color);
+static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Color* color);
 static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx);
-static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color);
 
 static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx);
 
 static void load_buffer_data_for_indicator(Indicator* indicator);
 
+static void update_vertex_buffer_data_for_indicator(Indicator* indicator);
 static void update_position_buffer_data_for_indicator(Indicator* indicator);
 static void update_color_buffer_data_for_indicator(Indicator* indicator);
 
@@ -106,7 +108,7 @@ void initialize_indicators(void)
     generate_shader_code_for_indicators();
 }
 
-void add_boundary_indicator_for_field(const char* field_texture_name, const Vector4f* color)
+void add_boundary_indicator_for_field(const char* field_texture_name, const Color* color)
 {
     check(color);
 
@@ -119,7 +121,7 @@ void add_boundary_indicator_for_field(const char* field_texture_name, const Vect
     bricked_field->field_boundary_indicator_name = add_cube_edge_indicator(&lower_corner, &extent, color, "%s_boundaries", field_texture_name);
 }
 
-void add_boundary_indicator_for_bricks(const char* field_texture_name, const Vector4f* color)
+void add_boundary_indicator_for_bricks(const char* field_texture_name, const Color* color)
 {
     check(color);
 
@@ -145,7 +147,7 @@ void add_boundary_indicator_for_bricks(const char* field_texture_name, const Vec
     bricked_field->brick_boundaries_indicator_name = indicator->name.chars;
 }
 
-void add_boundary_indicator_for_sub_bricks(const char* field_texture_name, const Vector4f* color)
+void add_boundary_indicator_for_sub_bricks(const char* field_texture_name, const Color* color)
 {
     check(color);
 
@@ -183,14 +185,15 @@ const char* add_boundary_indicator_for_clip_plane(unsigned int clip_plane_idx,
                                                   const Vector3f* normal,
                                                   float origin_shift,
                                                   unsigned int back_corner_idx,
-                                                  const Vector4f* color)
+                                                  const Color* color)
 {
+    check(normal);
     check(color);
 
     const DynamicString name = create_string("clip_plane_%d_boundaries", clip_plane_idx);
     Indicator* const indicator = create_indicator(&name, 6, 6);
 
-    set_clip_plane_positions(indicator, normal, origin_shift, back_corner_idx);
+    set_clip_plane_boundary_positions(indicator, normal, origin_shift, back_corner_idx);
 
     for (unsigned int index_idx = 0; index_idx < 6; index_idx++)
         indicator->index_buffer[index_idx] = index_idx;
@@ -202,14 +205,47 @@ const char* add_boundary_indicator_for_clip_plane(unsigned int clip_plane_idx,
     return indicator->name.chars;
 }
 
+const char* add_normal_indicator_for_clip_planes(const Vector3f* normal, float origin_shift, const Color* color)
+{
+    check(normal);
+    check(color);
+
+    const DynamicString name = create_string("clip_plane_normal");
+    Indicator* const indicator = create_indicator(&name, 2, 2);
+
+    set_clip_plane_normal_vertices(indicator, normal, origin_shift, color);
+
+    indicator->index_buffer[0] = 0;
+    indicator->index_buffer[1] = 1;
+
+    load_buffer_data_for_indicator(indicator);
+
+    return indicator->name.chars;
+}
+
 void update_clip_plane_boundary_indicator(const char* indicator_name,
                                           const Vector3f* normal,
                                           float origin_shift,
                                           unsigned int back_corner_idx)
 {
+    check(normal);
+
     Indicator* const indicator = get_indicator(indicator_name);
-    set_clip_plane_positions(indicator, normal, origin_shift, back_corner_idx);
+    set_clip_plane_boundary_positions(indicator, normal, origin_shift, back_corner_idx);
     update_position_buffer_data_for_indicator(indicator);
+}
+
+void update_clip_plane_normal_indicator(const char* indicator_name,
+                                        const Vector3f* normal,
+                                        float origin_shift,
+                                        const Color* color)
+{
+    check(normal);
+    check(color);
+
+    Indicator* const indicator = get_indicator(indicator_name);
+    set_clip_plane_normal_vertices(indicator, normal, origin_shift, color);
+    update_vertex_buffer_data_for_indicator(indicator);
 }
 
 void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass)
@@ -323,6 +359,29 @@ void draw_clip_plane_boundary_indicator(const char* indicator_name)
     glUseProgram(0);
 }
 
+void draw_clip_plane_normal_indicator(const char* indicator_name)
+{
+    Indicator* const indicator = get_indicator(indicator_name);
+
+    assert(active_shader_program);
+    glUseProgram(active_shader_program->id);
+    abort_on_GL_error("Could not use shader program for drawing indicator");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    glDrawElements(GL_LINES, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glDrawElements(GL_POINTS, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
 void destroy_edge_indicator(const char* name)
 {
     Indicator* const indicator = get_indicator(name);
@@ -356,7 +415,7 @@ static void generate_shader_code_for_indicators(void)
     assign_input_to_new_output_in_shader(&active_shader_program->fragment_shader_source, "vec4", "ex_color", "out_color");
 }
 
-static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Vector4f* color, const char* name, ...)
+static const char* add_cube_edge_indicator(const Vector3f* lower_corner, const Vector3f* extent, const Color* color, const char* name, ...)
 {
     check(lower_corner);
     check(extent);
@@ -449,7 +508,7 @@ static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, 
     indicator->n_indices = n_indices;
 
     indicator->position_buffer_size = n_vertices*sizeof(Vector4f);
-    indicator->color_buffer_size = n_vertices*sizeof(Vector4f);
+    indicator->color_buffer_size = n_vertices*sizeof(Color);
     indicator->vertex_buffer_size = indicator->position_buffer_size + indicator->color_buffer_size;
     indicator->index_buffer_size = n_indices*sizeof(unsigned int);
 
@@ -462,7 +521,7 @@ static void allocate_indicator_buffers(Indicator* indicator, size_t n_vertices, 
         print_severe_message("Could not allocate memory for indicator indices.");
 
     indicator->vertices.positions = (Vector4f*)indicator->vertex_buffer;
-    indicator->vertices.colors = indicator->vertices.positions + n_vertices;
+    indicator->vertices.colors = (Color*)(indicator->vertices.positions + n_vertices);
 }
 
 static void set_cube_vertex_positions(Indicator* indicator, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent)
@@ -495,7 +554,7 @@ static void set_cube_vertex_positions(Indicator* indicator, size_t* running_vert
     *running_vertex_idx = vertex_idx;
 }
 
-static void set_clip_plane_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx)
+static void set_clip_plane_boundary_positions(Indicator* indicator, const Vector3f* normal, float origin_shift, unsigned int back_corner_idx)
 {
     assert(indicator);
     assert(normal);
@@ -506,6 +565,28 @@ static void set_clip_plane_positions(Indicator* indicator, const Vector3f* norma
                                                        back_corner_idx,
                                                        vertex_idx,
                                                        indicator->vertices.positions + vertex_idx);
+}
+
+static void set_clip_plane_normal_vertices(Indicator* indicator, const Vector3f* normal, float origin_shift, const Color* color)
+{
+    assert(indicator);
+    assert(normal);
+    assert(color);
+
+    set_vector4f_elements(indicator->vertices.positions + 0, 0.0f, 0.0f, 0.0f, 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + 1, origin_shift*normal->a[0], origin_shift*normal->a[1], origin_shift*normal->a[2], 1.0f);
+
+    set_vertex_colors(indicator, 0, 2, color);
+}
+
+static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Color* color)
+{
+    assert(indicator);
+    assert(start_vertex_idx + n_vertices <= indicator->n_vertices);
+    assert(color);
+
+    for (size_t vertex_idx = start_vertex_idx; vertex_idx < start_vertex_idx + n_vertices; vertex_idx++)
+        indicator->vertices.colors[vertex_idx] = *color;
 }
 
 static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx)
@@ -523,16 +604,6 @@ static void set_cube_edges(Indicator* indicator, size_t start_vertex_idx, size_t
     }
 
     *running_index_idx = start_index_idx + 24;
-}
-
-static void set_vertex_colors(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Vector4f* color)
-{
-    assert(indicator);
-    assert(start_vertex_idx + n_vertices <= indicator->n_vertices);
-    assert(color);
-
-    for (size_t vertex_idx = start_vertex_idx; vertex_idx < start_vertex_idx + n_vertices; vertex_idx++)
-        indicator->vertices.colors[vertex_idx] = *color;
 }
 
 static void set_sub_brick_cube_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx)
@@ -584,6 +655,23 @@ static void load_buffer_data_for_indicator(Indicator* indicator)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indicator->index_buffer_id);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)indicator->index_buffer_size, (GLvoid*)indicator->index_buffer, GL_STATIC_DRAW);
     abort_on_GL_error("Could not load index buffer data for indicator");
+
+    glBindVertexArray(0);
+}
+
+static void update_vertex_buffer_data_for_indicator(Indicator* indicator)
+{
+    assert(indicator);
+    assert(indicator->vertex_buffer);
+    assert(indicator->vertex_array_object_id > 0);
+    assert(indicator->vertex_buffer_id > 0);
+
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for indicator");
+
+    glBindBuffer(GL_ARRAY_BUFFER, indicator->vertex_buffer_id);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)indicator->vertex_buffer_size, (GLvoid*)indicator->vertex_buffer);
+    abort_on_GL_error("Could not update vertex buffer data for indicator");
 
     glBindVertexArray(0);
 }
