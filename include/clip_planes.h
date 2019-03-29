@@ -21,11 +21,13 @@ void set_controllable_clip_plane(unsigned int idx);
 void enable_clip_plane_control(void);
 void disable_clip_plane_control(void);
 
-void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
-void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
+void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y);
+void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y);
 void clip_plane_control_drag_end_callback(void);
 void clip_plane_control_scroll_callback(double scroll_rate);
 void clip_plane_control_flip_callback(void);
+
+void draw_clip_planes(void);
 
 void reset_clip_plane(unsigned int plane_idx);
 

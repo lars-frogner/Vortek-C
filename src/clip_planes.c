@@ -4,6 +4,7 @@
 #include "extra_math.h"
 #include "linked_list.h"
 #include "trackball.h"
+#include "indicators.h"
 #include "shader_generator.h"
 #include "view_aligned_planes.h"
 
@@ -20,16 +21,17 @@ typedef struct ClipPlane
 {
     Vector3f normal;
     float origin_shift;
+    unsigned int axis_aligned_box_back_corner;
     unsigned int axis_aligned_box_front_corner;
     enum clip_plane_state state;
     enum plane_controllability controllability;
     Uniform normal_uniform;
     Uniform origin_shift_uniform;
+    const char* boundary_indicator_name;
 } ClipPlane;
 
 typedef struct ClipPlaneController
 {
-    Trackball trackball;
     float origin_shift_rate_modifier;
     Vector3f max_abs_origin_shifts;
     unsigned int controllable_idx;
@@ -73,7 +75,7 @@ void initialize_clip_planes(void)
     {
         glEnable(GL_CLIP_DISTANCE0 + idx);
         clip_planes[idx].state = CLIP_PLANE_DISABLED;
-        clip_planes[idx].controllability = (idx < 3) ? SHIFT_CONTROL : FULL_CONTROL;
+        clip_planes[idx].controllability = FULL_CONTROL;
         initialize_uniform(&clip_planes[idx].normal_uniform, "clip_plane_normals[%d]", idx);
         initialize_uniform(&clip_planes[idx].origin_shift_uniform, "clip_plane_origin_shifts[%d]", idx);
     }
@@ -81,7 +83,6 @@ void initialize_clip_planes(void)
     set_vector3f_elements(&disabled_normal, 0, 0, 0);
     disabled_origin_shift = -1.0f;
 
-    initialize_trackball(&controller.trackball);
     controller.origin_shift_rate_modifier = 5e-3f;
     set_vector3f_elements(&controller.max_abs_origin_shifts, 1.0f, 1.0f, 1.0f);
     controller.controllable_idx = 0;
@@ -94,11 +95,20 @@ void load_clip_planes(void)
 {
     check(active_shader_program);
 
+    Vector4f color = {{1.0f, 0.0f, 0.0f, 1.0f}};
+
     for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
     {
         load_uniform(active_shader_program, &clip_planes[idx].normal_uniform);
         load_uniform(active_shader_program, &clip_planes[idx].origin_shift_uniform);
         reset_clip_plane(idx);
+
+        clip_planes[idx].boundary_indicator_name =
+            add_boundary_indicator_for_clip_plane(idx,
+                                                  &clip_planes[idx].normal,
+                                                  clip_planes[idx].origin_shift,
+                                                  clip_planes[idx].axis_aligned_box_back_corner,
+                                                  &color);
     }
 }
 
@@ -163,29 +173,29 @@ void disable_clip_plane_control(void)
     controller.state = NO_CONTROL;
 }
 
-void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void clip_plane_control_drag_start_callback(double screen_coord_x, double screen_coord_y)
 {
     if (controller.state == CONTROL &&
         clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED &&
         clip_planes[controller.controllable_idx].controllability == FULL_CONTROL)
     {
-        activate_trackball(&controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+        activate_trackball_in_world_space(screen_coord_x, screen_coord_y);
         controller.is_dragging = 1;
     }
 }
 
-void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void clip_plane_control_drag_callback(double screen_coord_x, double screen_coord_y)
 {
     if (controller.state == CONTROL &&
         clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED &&
         clip_planes[controller.controllable_idx].controllability == FULL_CONTROL &&
         controller.is_dragging)
     {
-        drag_trackball(&controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+        drag_trackball_in_world_space(screen_coord_x, screen_coord_y);
 
         rotate_vector3f_about_axis(&clip_planes[controller.controllable_idx].normal,
-                                   &controller.trackball.current_rotation_axis,
-                                   controller.trackball.current_rotation_angle);
+                                   get_current_trackball_rotation_axis(),
+                                   get_current_trackball_rotation_angle());
         normalize_vector3f(&clip_planes[controller.controllable_idx].normal);
 
         sync_clip_plane(controller.controllable_idx);
@@ -205,7 +215,7 @@ void clip_plane_control_scroll_callback(double scroll_rate)
     {
         const float new_origin_shift = clip_planes[controller.controllable_idx].origin_shift + controller.origin_shift_rate_modifier*(float)scroll_rate;
 
-        const Vector3f max_shift_vector = multiply_vector3f(&controller.max_abs_origin_shifts,
+        const Vector3f max_shift_vector = multiplied_vector3f(&controller.max_abs_origin_shifts,
                                                             centered_corners + clip_planes[controller.controllable_idx].axis_aligned_box_front_corner);
         const float max_abs_origin_shift = dot3f(&max_shift_vector, &clip_planes[controller.controllable_idx].normal);
 
@@ -223,6 +233,15 @@ void clip_plane_control_flip_callback(void)
         invert_vector3f(&clip_planes[controller.controllable_idx].normal);
         clip_planes[controller.controllable_idx].origin_shift = -clip_planes[controller.controllable_idx].origin_shift;
         sync_clip_plane(controller.controllable_idx);
+    }
+}
+
+void draw_clip_planes(void)
+{
+    for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
+    {
+        if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
+            draw_clip_plane_boundary_indicator(clip_planes[idx].boundary_indicator_name);
     }
 }
 
@@ -244,13 +263,14 @@ int axis_aligned_box_in_clipped_region(const Vector3f* offset, const Vector3f* e
     assert(extent);
 
     const Vector3f* corners = get_unit_axis_aligned_box_corners();
+    Vector3f front_corner;
 
     for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
     {
         if (clip_planes[idx].state != CLIP_PLANE_DISABLED)
         {
-            const Vector3f unoffset_front_corner = multiply_vector3f(extent, corners + clip_planes[idx].axis_aligned_box_front_corner);
-            const Vector3f front_corner = add_vector3f(offset, &unoffset_front_corner);
+            front_corner = multiplied_vector3f(extent, corners + clip_planes[idx].axis_aligned_box_front_corner);
+            add_vector3f(offset, &front_corner);
 
             if (dot3f(&front_corner, &clip_planes[idx].normal) < clip_planes[idx].origin_shift)
                 return 1;
@@ -317,6 +337,7 @@ static void sync_clip_plane(unsigned int idx)
 
     if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
     {
+        clip_planes[idx].axis_aligned_box_back_corner = get_axis_aligned_box_back_corner_for_plane(&clip_planes[idx].normal);
         clip_planes[idx].axis_aligned_box_front_corner = get_axis_aligned_box_front_corner_for_plane(&clip_planes[idx].normal);
 
         glUniform3fv(clip_planes[idx].normal_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].normal));
@@ -324,6 +345,11 @@ static void sync_clip_plane(unsigned int idx)
 
         glUniform1fv(clip_planes[idx].origin_shift_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].origin_shift));
         abort_on_GL_error("Could not update clip plane origin distance uniform");
+
+        update_clip_plane_boundary_indicator(clip_planes[idx].boundary_indicator_name,
+                                             &clip_planes[idx].normal,
+                                             clip_planes[idx].origin_shift,
+                                             clip_planes[idx].axis_aligned_box_back_corner);
     }
     else
     {
