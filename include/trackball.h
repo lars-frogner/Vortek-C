@@ -3,17 +3,17 @@
 
 #include "geometry.h"
 
-typedef struct Trackball
-{
-    double radius;
-    Vector3 previous_activation_point;
-    Vector3f current_rotation_axis;
-    float current_rotation_angle;
-} Trackball;
+void initialize_trackball(void);
 
-void initialize_trackball(Trackball* trackball);
-void activate_trackball(Trackball* trackball, double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
-void drag_trackball(Trackball* trackball, double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
-void scale_trackball(Trackball* trackball, double scale);
+void activate_trackball_in_eye_space(double screen_coord_x, double screen_coord_y);
+void activate_trackball_in_world_space(double screen_coord_x, double screen_coord_y);
+
+void drag_trackball_in_eye_space(double screen_coord_x, double screen_coord_y);
+void drag_trackball_in_world_space(double screen_coord_x, double screen_coord_y);
+
+void scale_trackball(double scale);
+
+const Vector3f* get_current_trackball_rotation_axis(void);
+float get_current_trackball_rotation_angle(void);
 
 #endif
