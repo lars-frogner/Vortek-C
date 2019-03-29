@@ -5,6 +5,7 @@
 #include "dynamic_string.h"
 #include "trackball.h"
 #include "view_aligned_planes.h"
+#include "window.h"
 
 #include <math.h>
 
@@ -30,8 +31,8 @@ typedef struct Transformation
     Matrix4f view_matrix;
     ProjectionTransformation projection;
     Matrix4f modelview_matrix;
-    Matrix4f viewprojection_matrix;
     Matrix4f MVP_matrix;
+    Matrix4f inverse_view_matrix;
     Uniform uniforms[MAX_ACTIVE_SHADER_PROGRAMS];
 } Transformation;
 
@@ -44,7 +45,6 @@ typedef struct Camera
 
 typedef struct CameraController
 {
-    Trackball trackball;
     float zoom_rate_modifier;
     float plane_separation_modifier;
     float current_plane_separation;
@@ -96,7 +96,6 @@ void initialize_transformation(void)
         initialize_uniform(camera.look_axis_uniforms + program_idx, "look_axis");
     }
 
-    initialize_trackball(&camera_controller.trackball);
     camera_controller.zoom_rate_modifier = 1e-2f;
     camera_controller.plane_separation_modifier = 2.0f;
     camera_controller.state = CONTROL;
@@ -241,14 +240,14 @@ const Matrix4f* get_modelview_transform_matrix(void)
     return &transformation.modelview_matrix;
 }
 
-const Matrix4f* get_viewprojection_transform_matrix(void)
-{
-    return &transformation.viewprojection_matrix;
-}
-
 const Matrix4f* get_model_view_projection_transform_matrix(void)
 {
     return &transformation.MVP_matrix;
+}
+
+const Matrix4f* get_inverse_view_transform_matrix(void)
+{
+    return &transformation.inverse_view_matrix;
 }
 
 const Vector3f* get_camera_look_axis(void)
@@ -285,11 +284,11 @@ void disable_camera_control(void)
     camera_controller.state = NO_CONTROL;
 }
 
-void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y)
 {
     if (camera_controller.state == CONTROL)
     {
-        activate_trackball(&camera_controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+        activate_trackball_in_eye_space(screen_coord_x, screen_coord_y);
 
         camera_controller.current_plane_separation = get_plane_separation();
         set_plane_separation(camera_controller.current_plane_separation*camera_controller.plane_separation_modifier);
@@ -298,14 +297,14 @@ void camera_control_drag_start_callback(double screen_coord_x, double screen_coo
     }
 }
 
-void camera_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height)
+void camera_control_drag_callback(double screen_coord_x, double screen_coord_y)
 {
     if (camera_controller.state == CONTROL && camera_controller.is_dragging)
     {
-        drag_trackball(&camera_controller.trackball, screen_coord_x, screen_coord_y, screen_width, screen_height);
+        drag_trackball_in_eye_space(screen_coord_x, screen_coord_y);
 
-        apply_origin_centered_view_rotation_about_axis(&camera_controller.trackball.current_rotation_axis,
-                                                       camera_controller.trackball.current_rotation_angle);
+        apply_origin_centered_view_rotation_about_axis(get_current_trackball_rotation_axis(),
+                                                       get_current_trackball_rotation_angle());
     }
 }
 
@@ -323,7 +322,7 @@ void camera_control_scroll_callback(double scroll_rate)
     if (camera_controller.state == CONTROL)
     {
         const double scale = exp(camera_controller.zoom_rate_modifier*scroll_rate);
-        scale_trackball(&camera_controller.trackball, scale);
+        scale_trackball(scale);
         apply_model_scaling((float)scale);
     }
 }
@@ -364,7 +363,9 @@ static void sync_transformation(void)
 {
     transformation.modelview_matrix = multiply_matrix4f(&transformation.view_matrix, &transformation.model_matrix);
     transformation.MVP_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.modelview_matrix);
-    transformation.viewprojection_matrix = multiply_matrix4f(&transformation.projection.matrix, &transformation.view_matrix);
+
+    transformation.inverse_view_matrix = transformation.view_matrix;
+    invert_matrix4f(&transformation.inverse_view_matrix);
 
     for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
     {
@@ -386,13 +387,10 @@ static void sync_transformation(void)
 
 static void sync_camera(void)
 {
-    const Matrix4f* view_matrix = &transformation.view_matrix;
+    get_matrix4f_third_column_vector3f(&transformation.inverse_view_matrix, &camera.look_axis);
+    get_matrix4f_fourth_column_vector3f(&transformation.inverse_view_matrix, &camera.position);
 
-    Matrix4f inverse_view_matrix = *view_matrix;
-    invert_matrix4f(&inverse_view_matrix);
-    get_matrix4f_third_column_vector3f(&inverse_view_matrix, &camera.look_axis);
     normalize_vector3f(&camera.look_axis);
-    get_matrix4f_fourth_column_vector3f(&inverse_view_matrix, &camera.position);
 
     for (unsigned int program_idx = 0; program_idx < active_shader_programs.n_active_programs; program_idx++)
     {

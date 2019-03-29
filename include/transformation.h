@@ -35,8 +35,8 @@ const Matrix4f* get_view_transform_matrix(void);
 const Matrix4f* get_model_transform_matrix(void);
 const Matrix4f* get_projection_transform_matrix(void);
 const Matrix4f* get_modelview_transform_matrix(void);
-const Matrix4f* get_viewprojection_transform_matrix(void);
 const Matrix4f* get_model_view_projection_transform_matrix(void);
+const Matrix4f* get_inverse_view_transform_matrix(void);
 
 const Vector3f* get_camera_look_axis(void);
 const Vector3f* get_camera_position(void);
@@ -47,8 +47,8 @@ float get_component_of_vector_from_model_point_to_camera(const Vector3f* point, 
 void enable_camera_control(void);
 void disable_camera_control(void);
 
-void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
-void camera_control_drag_callback(double screen_coord_x, double screen_coord_y, int screen_width, int screen_height);
+void camera_control_drag_start_callback(double screen_coord_x, double screen_coord_y);
+void camera_control_drag_callback(double screen_coord_x, double screen_coord_y);
 void camera_control_drag_end_callback(void);
 void camera_control_scroll_callback(double scroll_rate);
 
