@@ -27,6 +27,12 @@ void clip_plane_control_drag_end_callback(void);
 void clip_plane_control_scroll_callback(double scroll_rate);
 void clip_plane_control_flip_callback(void);
 
+void clip_plane_control_set_normal_to_x_axis_callback(void);
+void clip_plane_control_set_normal_to_y_axis_callback(void);
+void clip_plane_control_set_normal_to_z_axis_callback(void);
+void clip_plane_control_set_normal_to_look_axis_callback(void);
+void clip_plane_control_reset_origin_shift_callback(void);
+
 void draw_clip_planes(void);
 
 void reset_clip_plane(unsigned int plane_idx);

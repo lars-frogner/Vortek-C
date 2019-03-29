@@ -2,8 +2,10 @@
 
 #include "error.h"
 #include "extra_math.h"
+#include "colors.h"
 #include "linked_list.h"
 #include "trackball.h"
+#include "transformation.h"
 #include "indicators.h"
 #include "shader_generator.h"
 #include "view_aligned_planes.h"
@@ -12,6 +14,7 @@
 
 
 #define MAX_CLIP_PLANES 6
+#define CLIP_PLANE_ALPHA 0.6f
 
 
 enum controller_state {NO_CONTROL, CONTROL};
@@ -23,6 +26,7 @@ typedef struct ClipPlane
     float origin_shift;
     unsigned int axis_aligned_box_back_corner;
     unsigned int axis_aligned_box_front_corner;
+    Color color;
     enum clip_plane_state state;
     enum plane_controllability controllability;
     Uniform normal_uniform;
@@ -58,6 +62,15 @@ static ClipPlane clip_planes[MAX_CLIP_PLANES];
 
 static Vector3f disabled_normal;
 static float disabled_origin_shift;
+
+static const char* normal_indicator_name = NULL;
+static const enum standard_color clip_plane_colors[MAX_CLIP_PLANES] =
+    {COLOR_RED,
+     COLOR_GREEN,
+     COLOR_BLUE,
+     COLOR_CYAN,
+     COLOR_MAGENTA,
+     COLOR_YELLOW};
 
 static ClipPlaneController controller;
 
@@ -95,8 +108,6 @@ void load_clip_planes(void)
 {
     check(active_shader_program);
 
-    Vector4f color = {{1.0f, 0.0f, 0.0f, 1.0f}};
-
     for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
     {
         load_uniform(active_shader_program, &clip_planes[idx].normal_uniform);
@@ -108,8 +119,12 @@ void load_clip_planes(void)
                                                   &clip_planes[idx].normal,
                                                   clip_planes[idx].origin_shift,
                                                   clip_planes[idx].axis_aligned_box_back_corner,
-                                                  &color);
+                                                  &clip_planes[idx].color);
     }
+
+    normal_indicator_name = add_normal_indicator_for_clip_planes(&clip_planes[controller.controllable_idx].normal,
+                                                                 clip_planes[controller.controllable_idx].origin_shift,
+                                                                 &clip_planes[controller.controllable_idx].color);
 }
 
 void set_max_clip_plane_origin_shifts(float max_x, float max_y, float max_z)
@@ -160,7 +175,14 @@ void set_controllable_clip_plane(unsigned int idx)
 {
     check(idx < MAX_CLIP_PLANES);
     if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
+    {
         controller.controllable_idx = idx;
+
+        update_clip_plane_normal_indicator(normal_indicator_name,
+                                           &clip_planes[idx].normal,
+                                           clip_planes[idx].origin_shift,
+                                           &clip_planes[idx].color);
+    }
 }
 
 void enable_clip_plane_control(void)
@@ -236,6 +258,58 @@ void clip_plane_control_flip_callback(void)
     }
 }
 
+void clip_plane_control_set_normal_to_x_axis_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED)
+    {
+        set_vector3f_elements(&clip_planes[controller.controllable_idx].normal, -1.0f, 0.0f, 0.0f);
+        sync_clip_plane(controller.controllable_idx);
+    }
+}
+
+void clip_plane_control_set_normal_to_y_axis_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED)
+    {
+        set_vector3f_elements(&clip_planes[controller.controllable_idx].normal, 0.0f, 1.0f, 0.0f);
+        sync_clip_plane(controller.controllable_idx);
+    }
+}
+
+void clip_plane_control_set_normal_to_z_axis_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED)
+    {
+        set_vector3f_elements(&clip_planes[controller.controllable_idx].normal, 0.0f, 0.0f, -1.0f);
+        sync_clip_plane(controller.controllable_idx);
+    }
+}
+
+void clip_plane_control_set_normal_to_look_axis_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED)
+    {
+        const Vector3f* const look_axis = get_camera_look_axis();
+        clip_planes[controller.controllable_idx].normal = *look_axis;
+        invert_vector3f(&clip_planes[controller.controllable_idx].normal);
+        sync_clip_plane(controller.controllable_idx);
+    }
+}
+
+void clip_plane_control_reset_origin_shift_callback(void)
+{
+    if (controller.state == CONTROL &&
+        clip_planes[controller.controllable_idx].state != CLIP_PLANE_DISABLED)
+    {
+        clip_planes[controller.controllable_idx].origin_shift = 0.0f;
+        sync_clip_plane(controller.controllable_idx);
+    }
+}
+
 void draw_clip_planes(void)
 {
     for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
@@ -243,16 +317,21 @@ void draw_clip_planes(void)
         if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
             draw_clip_plane_boundary_indicator(clip_planes[idx].boundary_indicator_name);
     }
+
+    if (controller.state == CONTROL && clip_planes[controller.controllable_idx].state == CLIP_PLANE_ENABLED)
+        draw_clip_plane_normal_indicator(normal_indicator_name);
 }
 
 void reset_clip_plane(unsigned int idx)
 {
     check(idx < MAX_CLIP_PLANES);
 
-    set_vector3f_elements(&clip_planes[idx].normal, 0, 0, 0);
+    set_vector3f_elements(&clip_planes[idx].normal, 0.0f, 0.0f, 0.0f);
     clip_planes[idx].normal.a[idx % 3] = (idx % 3 == 1) ? 1.0f : -1.0f;
 
     clip_planes[idx].origin_shift = 0;
+
+    clip_planes[idx].color = create_standard_color(clip_plane_colors[idx], CLIP_PLANE_ALPHA);
 
     sync_clip_plane(idx);
 }
@@ -350,6 +429,12 @@ static void sync_clip_plane(unsigned int idx)
                                              &clip_planes[idx].normal,
                                              clip_planes[idx].origin_shift,
                                              clip_planes[idx].axis_aligned_box_back_corner);
+
+        if (idx == controller.controllable_idx)
+            update_clip_plane_normal_indicator(normal_indicator_name,
+                                               &clip_planes[idx].normal,
+                                               clip_planes[idx].origin_shift,
+                                               &clip_planes[idx].color);
     }
     else
     {
