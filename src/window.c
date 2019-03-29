@@ -22,6 +22,8 @@ typedef struct Window
     GLFWwindow* handle;
     int width_screen_coords;
     int height_screen_coords;
+    int width_pixels;
+    int height_pixels;
 } Window;
 
 typedef struct FPSCounter
@@ -43,7 +45,7 @@ static void cursor_pos_callback(GLFWwindow* window_handle, double xpos, double y
 static void scroll_callback(GLFWwindow* window_handle, double xoffset, double yoffset);
 
 
-static Window window = {NULL, 0, 0};
+static Window window = {NULL, 0, 0, 0, 0};
 
 static FPSCounter fps_counter;
 
@@ -81,12 +83,9 @@ void initialize_window(void)
     check(window.width_screen_coords > 0);
     check(window.height_screen_coords > 0);
 
-    int current_window_width, current_window_height;
-    glfwGetFramebufferSize(window.handle, &current_window_width, &current_window_height);
-    check(current_window_width > 0);
-    check(current_window_height > 0);
-
-    update_renderer_window_size_in_pixels(current_window_width, current_window_height);
+    glfwGetFramebufferSize(window.handle, &window.width_pixels, &window.height_pixels);
+    check(window.width_pixels > 0);
+    check(window.height_pixels > 0);
 
     glfwSwapInterval(1);
 
@@ -112,6 +111,27 @@ void mainloop(void)
         glfwPollEvents();
         glfwSwapBuffers(window.handle);
     }
+}
+
+void get_window_shape_in_pixels(int* width, int* height)
+{
+    assert(width);
+    assert(height);
+    *width = window.width_pixels;
+    *height = window.height_pixels;
+}
+
+void get_window_shape_in_screen_coordinates(int* width, int* height)
+{
+    assert(width);
+    assert(height);
+    *width = window.width_screen_coords;
+    *height = window.height_screen_coords;
+}
+
+float get_window_aspect_ratio(void)
+{
+    return (float)window.width_pixels/window.height_pixels;
 }
 
 void cleanup_window(void)
@@ -153,6 +173,8 @@ static void error_callback(int error, const char* description)
 
 static void framebuffer_size_callback(GLFWwindow* window_handle, int width, int height)
 {
+    window.width_pixels = width;
+    window.height_pixels = height;
     renderer_resize_callback(width, height);
 }
 
@@ -299,8 +321,8 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
         {
             double x_click_pos, y_click_pos;
             glfwGetCursorPos(window_handle, &x_click_pos, &y_click_pos);
-            camera_control_drag_start_callback(x_click_pos, y_click_pos, window.width_screen_coords, window.height_screen_coords);
-            clip_plane_control_drag_start_callback(x_click_pos, y_click_pos, window.width_screen_coords, window.height_screen_coords);
+            camera_control_drag_start_callback(x_click_pos, y_click_pos);
+            clip_plane_control_drag_start_callback(x_click_pos, y_click_pos);
 
             mouse_is_pressed = 1;
         }
@@ -317,8 +339,8 @@ static void cursor_pos_callback(GLFWwindow* window_handle, double xpos, double y
 {
     if (mouse_is_pressed)
     {
-        camera_control_drag_callback(xpos, ypos, window.width_screen_coords, window.height_screen_coords);
-        clip_plane_control_drag_callback(xpos, ypos, window.width_screen_coords, window.height_screen_coords);
+        camera_control_drag_callback(xpos, ypos);
+        clip_plane_control_drag_callback(xpos, ypos);
     }
 }
 
