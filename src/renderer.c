@@ -153,8 +153,8 @@ static void pre_initialize_single_field_rendering(SingleFieldRenderingState* sta
     set_active_bricked_field(get_texture_bricked_field(state->texture_name));
 
     const Color field_boundary_color = create_standard_color(COLOR_WHITE, 0.15f);
-    const Color brick_boundary_color = create_standard_color(COLOR_GREEN, 0.15f);
-    const Color sub_brick_boundary_color = create_standard_color(COLOR_BLUE, 0.15f);
+    const Color brick_boundary_color = create_standard_color(COLOR_YELLOW, 0.15f);
+    const Color sub_brick_boundary_color = create_standard_color(COLOR_CYAN, 0.15f);
     add_boundary_indicator_for_field(state->texture_name, &field_boundary_color);
     add_boundary_indicator_for_bricks(state->texture_name, &brick_boundary_color);
     add_boundary_indicator_for_sub_bricks(state->texture_name, &sub_brick_boundary_color);
