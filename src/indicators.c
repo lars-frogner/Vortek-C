@@ -740,7 +740,7 @@ static void draw_sub_brick_edges(const SubBrickTreeNode* node)
 
     if (node->visibility == REGION_VISIBLE)
     {
-        glDrawElements(GL_LINE_LOOP, 24, GL_UNSIGNED_INT, (GLvoid*)(node->indicator_idx*sizeof(unsigned int)));
+        glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, (GLvoid*)(node->indicator_idx*sizeof(unsigned int)));
         abort_on_GL_error("Could not draw indicator");
     }
     else
