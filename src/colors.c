@@ -36,6 +36,16 @@ Color create_standard_color(enum standard_color color, float alpha)
     return result;
 }
 
+Color create_hex_color(int hex_color, float alpha)
+{
+    check(alpha >= 0 && alpha <= 1);
+    Color result = {((hex_color >> 16) & 0xFF)/255.0f,
+                    ((hex_color >>  8) & 0xFF)/255.0f,
+                    ((hex_color >>  0) & 0xFF)/255.0f,
+                    alpha};
+    return result;
+}
+
 const Color* get_full_standard_color(enum standard_color color)
 {
     return full_standard_colors + color;

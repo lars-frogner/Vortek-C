@@ -20,6 +20,7 @@ typedef struct Color
 
 Color create_color(float red, float green, float blue, float alpha);
 Color create_standard_color(enum standard_color color, float alpha);
+Color create_hex_color(int hex_color, float alpha);
 const Color* get_full_standard_color(enum standard_color color);
 
 #endif
