@@ -14,7 +14,7 @@
 
 
 #define MAX_CLIP_PLANES 6
-#define CLIP_PLANE_ALPHA 0.6f
+#define CLIP_PLANE_ALPHA 0.8f
 
 
 enum controller_state {NO_CONTROL, CONTROL};
@@ -64,13 +64,13 @@ static Vector3f disabled_normal;
 static float disabled_origin_shift;
 
 static const char* normal_indicator_name = NULL;
-static const enum standard_color clip_plane_colors[MAX_CLIP_PLANES] =
-    {COLOR_RED,
-     COLOR_GREEN,
-     COLOR_BLUE,
-     COLOR_CYAN,
-     COLOR_MAGENTA,
-     COLOR_YELLOW};
+static const int clip_plane_hex_colors[MAX_CLIP_PLANES] =
+    {0xE8042E,
+     0x19C659,
+     0x2695EF,
+     0x2AAAA2,
+     0xC11F7D,
+     0xE36414};
 
 static ClipPlaneController controller;
 
@@ -331,7 +331,7 @@ void reset_clip_plane(unsigned int idx)
 
     clip_planes[idx].origin_shift = 0;
 
-    clip_planes[idx].color = create_standard_color(clip_plane_colors[idx], CLIP_PLANE_ALPHA);
+    clip_planes[idx].color = create_hex_color(clip_plane_hex_colors[idx], CLIP_PLANE_ALPHA);
 
     sync_clip_plane(idx);
 }
