@@ -9,10 +9,10 @@
 #include <float.h>
 
 
-static Field* create_field(const char* name,
-                           enum field_type type, float* data,
-                           size_t size_x, size_t size_y, size_t size_z,
-                           float physical_extent_x, float physical_extent_y, float physical_extent_z);
+static const char* create_field(const char* name,
+                                enum field_type type, float* data,
+                                size_t size_x, size_t size_y, size_t size_z,
+                                float physical_extent_x, float physical_extent_y, float physical_extent_z);
 static size_t get_field_array_length(const Field* field);
 static void swap_x_and_z_axes(const float* input_array, size_t size_x, size_t size_y, size_t size_z, float* output_array);
 static void find_float_array_limits(const float* array, size_t length, float* min_value, float* max_value);
@@ -28,7 +28,7 @@ void initialize_fields(void)
     fields = create_map();
 }
 
-Field* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename)
+const char* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename)
 {
     check(name);
     check(data_filename);
@@ -120,8 +120,14 @@ Field* get_field(const char* name)
 void destroy_field(const char* name)
 {
     Field* const field = get_field(name);
+
+    DynamicString field_name_copy = create_duplicate_string(&field->name);
+
     clear_field(field);
-    remove_map_item(&fields, name);
+
+    remove_map_item(&fields, field_name_copy.chars);
+
+    clear_string(&field_name_copy);
 }
 
 void cleanup_fields(void)
@@ -135,10 +141,10 @@ void cleanup_fields(void)
     destroy_map(&fields);
 }
 
-static Field* create_field(const char* name,
-                           enum field_type type, float* data,
-                           size_t size_x, size_t size_y, size_t size_z,
-                           float physical_extent_x, float physical_extent_y, float physical_extent_z)
+const char* create_field(const char* name,
+                         enum field_type type, float* data,
+                         size_t size_x, size_t size_y, size_t size_z,
+                         float physical_extent_x, float physical_extent_y, float physical_extent_z)
 {
     check(name);
     check(data);
@@ -149,6 +155,7 @@ static Field* create_field(const char* name,
     MapItem item = insert_new_map_item(&fields, name, sizeof(Field));
     Field* const field = (Field*)item.data;
 
+    field->name = create_string(name);
     field->data = data;
     field->type = type;
     field->size_x = size_x;
@@ -174,7 +181,7 @@ static Field* create_field(const char* name,
 
     scale_float_array(data, length, field->min_value, field->max_value);
 
-    return field;
+    return field->name.chars;
 }
 
 static size_t get_field_array_length(const Field* field)
@@ -252,6 +259,7 @@ static void clear_field(Field* field)
     if (field->data)
         free(field->data);
 
+    clear_string(&field->name);
     field->data = NULL;
     field->type = NULL_FIELD;
     field->size_x = 0;

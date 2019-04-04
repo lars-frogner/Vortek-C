@@ -1,12 +1,15 @@
 #ifndef FIELDS_H
 #define FIELDS_H
 
+#include "dynamic_string.h"
+
 #include <stddef.h>
 
 enum field_type {NULL_FIELD = 0, SCALAR_FIELD = 1, VECTOR_FIELD = 2};
 
 typedef struct Field
 {
+    DynamicString name;
     float* data;
     enum field_type type;
     size_t size_x;
@@ -25,7 +28,7 @@ typedef struct Field
 
 void initialize_fields(void);
 
-Field* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename);
+const char* create_field_from_bifrost_file(const char* name, const char* data_filename, const char* header_filename);
 
 Field* get_field(const char* name);
 
