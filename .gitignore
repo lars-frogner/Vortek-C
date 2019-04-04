@@ -2,6 +2,7 @@
 *.x
 *.sublime-project
 *.sublime-workspace
+*.so
 external/
 obj/
 .d/
