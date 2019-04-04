@@ -1,10 +1,34 @@
 #ifndef INDICATORS_H
 #define INDICATORS_H
 
+#include "gl_includes.h"
 #include "geometry.h"
 #include "colors.h"
-#include "bricks.h"
+#include "dynamic_string.h"
 #include "shaders.h"
+
+typedef struct IndicatorVertices
+{
+    Vector4f* positions;
+    Color* colors;
+} IndicatorVertices;
+
+typedef struct Indicator
+{
+    DynamicString name;
+    IndicatorVertices vertices;
+    void* vertex_buffer;
+    unsigned int* index_buffer;
+    size_t n_vertices;
+    size_t n_indices;
+    size_t position_buffer_size;
+    size_t color_buffer_size;
+    size_t vertex_buffer_size;
+    size_t index_buffer_size;
+    GLuint vertex_array_object_id;
+    GLuint vertex_buffer_id;
+    GLuint index_buffer_id;
+} Indicator;
 
 enum indicator_drawing_pass {INDICATOR_BACK_PASS, INDICATOR_FRONT_PASS};
 
@@ -12,32 +36,23 @@ void set_active_shader_program_for_indicators(ShaderProgram* shader_program);
 
 void initialize_indicators(void);
 
-void add_boundary_indicator_for_field(const char* field_texture_name, const Color* color);
-void add_boundary_indicator_for_bricks(const char* field_texture_name, const Color* color);
-void add_boundary_indicator_for_sub_bricks(const char* field_texture_name, const Color* color);
-const char* add_boundary_indicator_for_clip_plane(unsigned int clip_plane_idx,
-                                                  const Vector3f* normal,
-                                                  float origin_shift,
-                                                  unsigned int back_corner_idx,
-                                                  const Color* color);
-const char* add_normal_indicator_for_clip_planes(const Vector3f* normal, float origin_shift, const Color* color);
+Indicator* create_indicator(const DynamicString* name, size_t n_vertices, size_t n_indices);
+Indicator* get_indicator(const char* name);
 
-void update_clip_plane_boundary_indicator(const char* indicator_name,
-                                          const Vector3f* normal,
-                                          float origin_shift,
-                                          unsigned int back_corner_idx);
-void update_clip_plane_normal_indicator(const char* indicator_name,
-                                        const Vector3f* normal,
-                                        float origin_shift,
-                                        const Color* color);
+GLuint get_active_indicator_shader_program_id(void);
 
-void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass);
-void draw_brick_boundary_indicator(const BrickedField* bricked_field);
-void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field);
-void draw_clip_plane_boundary_indicator(const char* indicator_name);
-void draw_clip_plane_normal_indicator(const char* indicator_name);
+void set_vertex_colors_for_indicator(Indicator* indicator, size_t start_vertex_idx, size_t n_vertices, const Color* color);
 
-void destroy_edge_indicator(const char* name);
+void set_cube_vertex_positions_for_indicator(Indicator* indicator, size_t* running_vertex_idx, const Vector3f* lower_corner, const Vector3f* extent);
+void set_cube_edges_for_indicator(Indicator* indicator, size_t start_vertex_idx, size_t* running_index_idx);
+
+void load_buffer_data_for_indicator(Indicator* indicator);
+
+void update_vertex_buffer_data_for_indicator(Indicator* indicator);
+void update_position_buffer_data_for_indicator(Indicator* indicator);
+void update_color_buffer_data_for_indicator(Indicator* indicator);
+
+void destroy_indicator(const char* name);
 void cleanup_indicators(void);
 
 #endif
