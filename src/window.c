@@ -99,20 +99,37 @@ void initialize_window(void)
     glfwSetScrollCallback(window.handle, scroll_callback);
 }
 
+void initialize_mainloop(void)
+{
+    fps_counter.previous_time = glfwGetTime();
+    fps_counter.frame_count = 0;
+}
+
+int step_mainloop(void)
+{
+    if (glfwWindowShouldClose(window.handle))
+        return 0;
+
+    renderer_update_callback();
+    update_FPS(window.handle);
+    glfwPollEvents();
+    glfwSwapBuffers(window.handle);
+
+    return 1;
+}
+
 void mainloop(void)
 {
     check(window.handle);
 
-    fps_counter.previous_time = glfwGetTime();
-    fps_counter.frame_count = 0;
+    initialize_mainloop();
 
-    while (!glfwWindowShouldClose(window.handle))
-    {
-        renderer_update_callback();
-        update_FPS(window.handle);
-        glfwPollEvents();
-        glfwSwapBuffers(window.handle);
-    }
+    while (step_mainloop()) { continue; }
+}
+
+void focus_window(void)
+{
+    glfwFocusWindow(window.handle);
 }
 
 void get_window_shape_in_pixels(int* width, int* height)
@@ -188,6 +205,9 @@ static void window_size_callback(GLFWwindow* window_handle, int width, int heigh
 
 static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, int action, int mods)
 {
+    if (!has_rendering_data())
+        return;
+
     if (action == GLFW_PRESS)
     {
         switch (key)
@@ -362,6 +382,9 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
 
 static void mouse_button_callback(GLFWwindow* window_handle, int button, int action, int mods)
 {
+    if (!has_rendering_data())
+        return;
+
     if (button == GLFW_MOUSE_BUTTON_LEFT)
     {
         if (action == GLFW_PRESS)
@@ -393,6 +416,9 @@ static void cursor_pos_callback(GLFWwindow* window_handle, double xpos, double y
 
 static void scroll_callback(GLFWwindow* window_handle, double xoffset, double yoffset)
 {
+    if (!has_rendering_data())
+        return;
+
     camera_control_scroll_callback(yoffset);
     clip_plane_control_scroll_callback(yoffset);
 }
