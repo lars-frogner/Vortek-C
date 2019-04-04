@@ -156,6 +156,13 @@ void print_transfer_function(const char* name, enum transfer_function_component 
         printf("%d (%5.3f): %.3f\n", node, clamp(((float)node - NODE_RANGE_OFFSET)*NODE_RANGE_NORM, 0, 1), transfer_function_texture->transfer_function.output[node][component]);
 }
 
+void reset_transfer_function(const char* name, enum transfer_function_component component)
+{
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
+    reset_transfer_function_texture_data(transfer_function_texture, (unsigned int)component);
+    sync_transfer_function(transfer_function_texture);
+}
+
 void set_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                  unsigned int node, float value)
 {
@@ -264,7 +271,7 @@ void set_transfer_function_upper_limit(const char* name, float upper_limit)
     sync_transfer_function_limits(transfer_function_texture);
 }
 
-void set_transfer_function_lower_node(const char* name, enum transfer_function_component component, float value)
+void set_transfer_function_lower_node_value(const char* name, enum transfer_function_component component, float value)
 {
     TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
@@ -277,7 +284,7 @@ void set_transfer_function_lower_node(const char* name, enum transfer_function_c
     sync_transfer_function(transfer_function_texture);
 }
 
-void set_transfer_function_upper_node(const char* name, enum transfer_function_component component, float value)
+void set_transfer_function_upper_node_value(const char* name, enum transfer_function_component component, float value)
 {
     TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
@@ -333,6 +340,8 @@ void cleanup_transfer_functions(void)
     }
 
     destroy_map(&transfer_function_textures);
+
+    active_shader_program = NULL;
 }
 
 static TransferFunctionTexture* get_transfer_function_texture(const char* name)

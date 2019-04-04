@@ -19,6 +19,8 @@ void load_transfer_functions(void);
 
 void print_transfer_function(const char* name, enum transfer_function_component component);
 
+void reset_transfer_function(const char* name, enum transfer_function_component component);
+
 void set_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
                                                  unsigned int node, float value);
 void remove_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
@@ -30,8 +32,8 @@ void set_logarithmic_transfer_function(const char* name, enum transfer_function_
 void set_transfer_function_lower_limit(const char* name, float lower_value);
 void set_transfer_function_upper_limit(const char* name, float upper_value);
 
-void set_transfer_function_lower_node(const char* name, enum transfer_function_component component, float value);
-void set_transfer_function_upper_node(const char* name, enum transfer_function_component component, float value);
+void set_transfer_function_lower_node_value(const char* name, enum transfer_function_component component, float value);
+void set_transfer_function_upper_node_value(const char* name, enum transfer_function_component component, float value);
 
 void update_visibility_ratios(const char* transfer_function_name, BrickedField* bricked_field);
 
