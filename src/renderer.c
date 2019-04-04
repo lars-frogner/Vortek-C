@@ -26,14 +26,16 @@ typedef struct SingleFieldRenderingState
 
 
 static void initialize_rendering_settings(void);
-static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state);
-static void post_initialize_single_field_rendering(SingleFieldRenderingState* state);
+static void pre_initialize_single_field_rendering(void);
+static void post_initialize_single_field_rendering(void);
 
 
 static ShaderProgram rendering_shader_program;
 static ShaderProgram indicator_shader_program;
 
 static SingleFieldRenderingState single_field_rendering_state;
+
+static int has_data;
 
 
 void initialize_renderer(void)
@@ -59,13 +61,14 @@ void initialize_renderer(void)
     initialize_trackball();
     initialize_transformation();
     initialize_planes();
+    initialize_bricks();
     initialize_clip_planes();
     initialize_textures();
     initialize_field_textures();
     initialize_transfer_functions();
     initialize_indicators();
 
-    pre_initialize_single_field_rendering(&single_field_rendering_state);
+    pre_initialize_single_field_rendering();
 
     compile_shader_program(&rendering_shader_program);
     compile_shader_program(&indicator_shader_program);
@@ -76,7 +79,9 @@ void initialize_renderer(void)
     load_textures();
     load_transfer_functions();
 
-    post_initialize_single_field_rendering(&single_field_rendering_state);
+    post_initialize_single_field_rendering();
+
+    has_data = 0;
 
     int width, height;
     get_window_shape_in_pixels(&width, &height);
@@ -87,7 +92,6 @@ void initialize_renderer(void)
 
 void cleanup_renderer(void)
 {
-    cleanup_indicators();
     cleanup_transfer_functions();
     cleanup_field_textures();
     cleanup_textures();
@@ -95,6 +99,7 @@ void cleanup_renderer(void)
     cleanup_planes();
     cleanup_transformation();
     cleanup_fields();
+    cleanup_indicators();
     destroy_shader_program(&indicator_shader_program);
     destroy_shader_program(&rendering_shader_program);
 }
@@ -111,6 +116,46 @@ void renderer_resize_callback(int width, int height)
 {
     update_camera_aspect_ratio((float)width/height);
     glViewport(0, 0, width, height);
+}
+
+int has_rendering_data(void)
+{
+    return has_data;
+}
+
+const char* get_single_field_rendering_texture_name(void)
+{
+    return single_field_rendering_state.texture_name;
+}
+
+const char* get_single_field_rendering_TF_name(void)
+{
+    return single_field_rendering_state.TF_name;
+}
+
+void set_single_field_rendering_field(const char* field_name)
+{
+    check(single_field_rendering_state.texture_name);
+
+    Field* const existing_field = get_field_texture_field(single_field_rendering_state.texture_name);
+    if (existing_field)
+        destroy_field(existing_field->name.chars);
+
+    Field* const field = get_field(field_name);
+
+    set_field_texture_field(single_field_rendering_state.texture_name, field);
+    set_max_clip_plane_origin_shifts(field->halfwidth, field->halfheight, field->halfdepth);
+    set_active_bricked_field(get_field_texture_bricked_field(single_field_rendering_state.texture_name));
+    set_plane_separation(0.5f);
+
+
+    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_RED, 0, 1);
+    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_GREEN, 0, 1);
+    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_BLUE, 0, 1);
+    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_ALPHA, 0, 1);
+    update_visibility_ratios(single_field_rendering_state.TF_name, get_field_texture_bricked_field(single_field_rendering_state.texture_name));
+
+    has_data = 1;
 }
 
 static void initialize_rendering_settings(void)
@@ -132,62 +177,27 @@ static void initialize_rendering_settings(void)
     glPointSize(5.0f);
 }
 
-static void pre_initialize_single_field_rendering(SingleFieldRenderingState* state)
+static void pre_initialize_single_field_rendering(void)
 {
-    check(state);
+    single_field_rendering_state.texture_name = create_scalar_field_texture();
+    single_field_rendering_state.TF_name = create_transfer_function();
 
-    Field* const field = create_field_from_bifrost_file("temperature_field",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.raw",
-                                                        "/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg.dat");
+    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&rendering_shader_program.fragment_shader_source,
+                                                                                               single_field_rendering_state.texture_name,
+                                                                                               "out_tex_coord");
 
-    //Field field = read_bifrost_field("/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.raw",
-    //                                 "/Users/larsfrog/Code/output_visualization/ebeam/en024031_emer3.0sml_ebeam_631_qbeam_hires.dat");
+    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&rendering_shader_program.fragment_shader_source,
+                                                                                          single_field_rendering_state.TF_name,
+                                                                                          field_texture_variable_number);
 
-    set_max_clip_plane_origin_shifts(field->halfwidth, field->halfheight, field->halfdepth);
-
-    set_min_sub_brick_size(6);
-
-    state->texture_name = create_scalar_field_texture(field, 6, 2);
-    state->TF_name = create_transfer_function();
-
-    set_active_bricked_field(get_texture_bricked_field(state->texture_name));
-
-    const Color field_boundary_color = create_standard_color(COLOR_WHITE, 0.15f);
-    const Color brick_boundary_color = create_standard_color(COLOR_YELLOW, 0.15f);
-    const Color sub_brick_boundary_color = create_standard_color(COLOR_CYAN, 0.15f);
-    add_boundary_indicator_for_field(state->texture_name, &field_boundary_color);
-    add_boundary_indicator_for_bricks(state->texture_name, &brick_boundary_color);
-    add_boundary_indicator_for_sub_bricks(state->texture_name, &sub_brick_boundary_color);
-
-    const size_t field_texture_variable_number = apply_scalar_field_texture_sampling_in_shader(&rendering_shader_program.fragment_shader_source, state->texture_name, "out_tex_coord");
-    const size_t mapped_field_texture_variable_number = apply_transfer_function_in_shader(&rendering_shader_program.fragment_shader_source, state->TF_name, field_texture_variable_number);
-    assign_variable_to_new_output_in_shader(&rendering_shader_program.fragment_shader_source, "vec4", mapped_field_texture_variable_number, "out_color");
+    assign_variable_to_new_output_in_shader(&rendering_shader_program.fragment_shader_source,
+                                            "vec4",
+                                            mapped_field_texture_variable_number,
+                                            "out_color");
 }
 
-static void post_initialize_single_field_rendering(SingleFieldRenderingState* state)
+static void post_initialize_single_field_rendering(void)
 {
-    check(state);
-
-    //set_transfer_function_upper_limit(state->TF_name, field_value_to_texture_value(state->texture_name, 5000.0f));
-    //set_transfer_function_upper_node(state->TF_name, TF_ALPHA, 0);
-
-    set_transfer_function_lower_limit(state->TF_name, field_value_to_texture_value(state->texture_name, 30000.0f));
-    set_transfer_function_lower_node(state->TF_name, TF_ALPHA, 0);
-
-    set_logarithmic_transfer_function(state->TF_name, TF_RED,   0, 1);
-    set_logarithmic_transfer_function(state->TF_name, TF_GREEN, 0, 1);
-    set_logarithmic_transfer_function(state->TF_name, TF_BLUE,  0, 1);
-    set_logarithmic_transfer_function(state->TF_name, TF_ALPHA, 0, 1);
-    //set_piecewise_linear_transfer_function_node(state->TF_name, TF_ALPHA, TF_START_NODE, 0);
-
-    update_visibility_ratios(state->TF_name, get_texture_bricked_field(state->texture_name));
-
-    //print_transfer_function(state->TF_name, TF_ALPHA);
-
     set_view_distance(2.0f);
-
-    update_camera_properties(60.0f, get_window_aspect_ratio(), 0.01f, 100.0f, PERSPECTIVE_PROJECTION);
-    //update_camera_properties(2.0f, (float)window_shape.width/window_shape.height, 0.01f, 100.0f, ORTHOGRAPHIC_PROJECTION);
-
-    set_plane_separation(0.5f);
+    update_camera_aspect_ratio(get_window_aspect_ratio());
 }
