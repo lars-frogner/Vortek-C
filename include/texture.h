@@ -21,6 +21,7 @@ Texture* create_texture(void);
 
 void load_textures(void);
 
+void delete_texture_data(Texture* texture);
 void destroy_texture(Texture* texture);
 void cleanup_textures(void);
 

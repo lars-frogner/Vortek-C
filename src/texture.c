@@ -19,7 +19,6 @@ static ExtendedTexture* get_texture(const char* name);
 static GLuint next_unused_texture_unit(void);
 static void load_texture(ExtendedTexture* extended_texture);
 static void sync_texture(ExtendedTexture* extended_texture);
-static void delete_texture(Texture* texture);
 
 
 static HashMap textures;
@@ -73,11 +72,25 @@ void load_textures(void)
     }
 }
 
+void delete_texture_data(Texture* texture)
+{
+    check(texture);
+
+    for (reset_list_iterator(&texture->ids); valid_list_iterator(&texture->ids); advance_list_iterator(&texture->ids))
+    {
+        ListItem item = get_current_list_item(&texture->ids);
+        glDeleteTextures(1, (GLuint*)item.data);
+        abort_on_GL_error("Could not destroy texture object");
+    }
+
+    clear_list(&texture->ids);
+}
+
 void destroy_texture(Texture* texture)
 {
     check(texture);
 
-    delete_texture(texture);
+    delete_texture_data(texture);
 
     ListItem item = append_new_list_item(&deleted_units, sizeof(GLuint));
     GLuint* const unit = (GLuint*)item.data;
@@ -99,13 +112,15 @@ void cleanup_textures(void)
     for (reset_map_iterator(&textures); valid_map_iterator(&textures); advance_map_iterator(&textures))
     {
         ExtendedTexture* const extended_texture = get_texture(get_current_map_key(&textures));
-        delete_texture(&extended_texture->texture);
+        delete_texture_data(&extended_texture->texture);
         clear_string(&extended_texture->texture.name);
         destroy_uniform(&extended_texture->uniform);
     }
 
     destroy_map(&textures);
     clear_list(&deleted_units);
+
+    active_shader_program = NULL;
 }
 
 static ExtendedTexture* get_texture(const char* name)
@@ -159,18 +174,4 @@ static void sync_texture(ExtendedTexture* extended_texture)
     abort_on_GL_error("Could not set texture uniform location");
 
     glUseProgram(0);
-}
-
-static void delete_texture(Texture* texture)
-{
-    check(texture);
-
-    for (reset_list_iterator(&texture->ids); valid_list_iterator(&texture->ids); advance_list_iterator(&texture->ids))
-    {
-        ListItem item = get_current_list_item(&texture->ids);
-        glDeleteTextures(1, (GLuint*)item.data);
-        abort_on_GL_error("Could not destroy texture object");
-    }
-
-    clear_list(&texture->ids);
 }
