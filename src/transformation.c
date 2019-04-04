@@ -207,7 +207,10 @@ void cleanup_transformation(void)
     {
         destroy_uniform(transformation.uniforms + program_idx);
         destroy_uniform(camera.look_axis_uniforms + program_idx);
+        active_shader_programs.programs[program_idx] = NULL;
     }
+
+    active_shader_programs.n_active_programs = 0;
 }
 
 const char* get_transformation_name(void)
