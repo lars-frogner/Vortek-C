@@ -22,6 +22,7 @@ typedef struct FieldTexture
 static FieldTexture* get_field_texture(const char* name);
 static void transfer_scalar_field_texture(FieldTexture* field_texture);
 static void clear_field_texture(FieldTexture* field_texture);
+static void clear_field_texture_field(FieldTexture* field_texture);
 
 
 static HashMap field_textures;
@@ -39,34 +40,43 @@ void set_active_shader_program_for_field_textures(ShaderProgram* shader_program)
     active_shader_program = shader_program;
 }
 
-const char* create_scalar_field_texture(Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
+const char* create_scalar_field_texture(void)
 {
-    check(field);
-    check(active_shader_program);
-
     Texture* const texture = create_texture();
 
     MapItem item = insert_new_map_item(&field_textures, texture->name.chars, sizeof(FieldTexture));
     FieldTexture* const field_texture = (FieldTexture*)item.data;
 
-    create_bricked_field(&field_texture->bricked_field, field, brick_size_exponent, kernel_size);
-    field_texture->bricked_field.texture_unit = texture->unit;
+    reset_bricked_field(&field_texture->bricked_field);
     field_texture->texture = texture;
-
-    transfer_scalar_field_texture(field_texture);
 
     add_field_texture_in_shader(&active_shader_program->fragment_shader_source, texture->name.chars);
 
     return texture->name.chars;
 }
 
-BrickedField* get_texture_bricked_field(const char* name)
+void set_field_texture_field(const char* name, Field* field)
+{
+    check(field);
+    check(active_shader_program);
+
+    FieldTexture* const field_texture = get_field_texture(name);
+
+    if (field_texture->bricked_field.field)
+        clear_field_texture_field(field_texture);
+
+    create_bricked_field(&field_texture->bricked_field, field);
+    field_texture->bricked_field.texture_unit = field_texture->texture->unit;
+    transfer_scalar_field_texture(field_texture);
+}
+
+BrickedField* get_field_texture_bricked_field(const char* name)
 {
     FieldTexture* const field_texture = get_field_texture(name);
     return &field_texture->bricked_field;
 }
 
-Field* get_texture_field(const char* name)
+Field* get_field_texture_field(const char* name)
 {
     FieldTexture* const field_texture = get_field_texture(name);
     return field_texture->bricked_field.field;
@@ -111,6 +121,8 @@ void cleanup_field_textures(void)
     }
 
     destroy_map(&field_textures);
+
+    active_shader_program = NULL;
 }
 
 static FieldTexture* get_field_texture(const char* name)
@@ -195,7 +207,14 @@ static void clear_field_texture(FieldTexture* field_texture)
     assert(field_texture);
     assert(field_texture->texture);
 
-    destroy_bricked_field(&field_texture->bricked_field);
+    clear_field_texture_field(field_texture);
+
     destroy_texture(field_texture->texture);
     field_texture->texture = NULL;
+}
+
+static void clear_field_texture_field(FieldTexture* field_texture)
+{
+    delete_texture_data(field_texture->texture);
+    destroy_bricked_field(&field_texture->bricked_field);
 }
