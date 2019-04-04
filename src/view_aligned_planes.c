@@ -373,8 +373,10 @@ void draw_active_bricked_field(void)
 {
     const BrickedField* const bricked_field = active_bricked_field.bricked_field;
 
+    if (bricked_field == NULL)
+        return;
+
     check(active_shader_program);
-    check(bricked_field);
     check(plane_stack.n_planes > 0);
 
     active_bricked_field.current_look_axis = get_camera_look_axis();
@@ -500,6 +502,7 @@ void cleanup_planes(void)
     destroy_uniform(&sampling_correction_uniform);
 
     active_bricked_field.bricked_field = NULL;
+    active_shader_program = NULL;
 }
 
 static void initialize_plane_stack(void)
