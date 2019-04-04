@@ -16,18 +16,32 @@
 
 #include "error.h"
 #include "extra_math.h"
+#include "colors.h"
+#include "dynamic_string.h"
+#include "transformation.h"
 
 #include <stdlib.h>
 #include <math.h>
 
 
 #define MIN_PADDED_BRICK_SIZE 8
+#define BOUNDARY_INDICATOR_ALPHA 0.15f
 
 
 typedef struct NodeIndices
 {
     size_t idx[3];
 } NodeIndices;
+
+typedef struct Configuration
+{
+    size_t requested_brick_size;
+    unsigned int kernel_size;
+    unsigned int sub_brick_size_limit;
+    int create_field_boundary_indicator;
+    int create_brick_boundary_indicator;
+    int create_sub_brick_boundary_indicator;
+} Configuration;
 
 
 static void copy_subarray_with_cycled_layout(const float* full_input_array,
@@ -54,22 +68,114 @@ static void destroy_brick_tree_node(BrickTreeNode* node);
 static void destroy_sub_brick_tree(Brick* brick);
 static void destroy_sub_brick_tree_node(SubBrickTreeNode* node);
 
+static void create_boundary_indicator_for_field(BrickedField* bricked_field);
+static void create_boundary_indicator_for_bricks(BrickedField* bricked_field);
+static void create_boundary_indicator_for_sub_bricks(BrickedField* bricked_field);
 
-static unsigned int sub_brick_size_limit = 16;
+static void set_sub_brick_boundary_indicator_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx);
+
+static void draw_brick_boundaries(const BrickTreeNode* node);
+static void draw_sub_brick_boundaries(const SubBrickTreeNode* node);
 
 
-void set_min_sub_brick_size(unsigned int size)
+static Configuration configuration;
+
+// Sets of faces adjacent to each cube corner                      //    2----------5
+static const unsigned int adjacent_cube_faces[8][3] = {{0, 2, 4},  //   /|         /|
+                                                       {1, 2, 4},  //  / |       3/ |
+                                                       {0, 3, 4},  // 6----------7 1|
+                                                       {0, 2, 5},  // |  | 4   5 |  |
+                                                       {1, 2, 5},  // |0 0-------|--1
+                                                       {1, 3, 4},  // | /2       | /
+                                                       {0, 3, 5},  // |/         |/
+                                                       {1, 3, 5}}; // 3----------4
+
+// Sign of the normal direction of each cube face
+static const int cube_face_normal_signs[6] = {-1, 1, -1, 1, -1, 1};
+
+static Color field_boundary_color;
+static Color brick_boundary_color;
+static Color sub_brick_boundary_color;
+
+static unsigned int field_boundary_indicator_count;
+static unsigned int brick_boundary_indicator_count;
+static unsigned int sub_brick_boundary_indicator_count;
+
+
+void initialize_bricks(void)
 {
-    check(size > 0);
-    sub_brick_size_limit = 2*size;
+    configuration.requested_brick_size = 64;
+    configuration.kernel_size = 2;
+    configuration.sub_brick_size_limit = 2*6;
+    configuration.create_field_boundary_indicator = 1;
+    configuration.create_brick_boundary_indicator = 0;
+    configuration.create_sub_brick_boundary_indicator = 0;
+
+    field_boundary_color = create_standard_color(COLOR_WHITE, BOUNDARY_INDICATOR_ALPHA);
+    brick_boundary_color = create_standard_color(COLOR_YELLOW, BOUNDARY_INDICATOR_ALPHA);
+    sub_brick_boundary_color = create_standard_color(COLOR_CYAN, BOUNDARY_INDICATOR_ALPHA);
+
+    field_boundary_indicator_count = 0;
+    brick_boundary_indicator_count = 0;
+    sub_brick_boundary_indicator_count = 0;
 }
 
-void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned int brick_size_exponent, unsigned int kernel_size)
+void reset_bricked_field(BrickedField* bricked_field)
+{
+    bricked_field->field = NULL;
+    bricked_field->bricks = NULL;
+    bricked_field->tree = NULL;
+    bricked_field->n_bricks = 0;
+    bricked_field->n_bricks_x = 0;
+    bricked_field->n_bricks_y = 0;
+    bricked_field->n_bricks_z = 0;
+    bricked_field->brick_size = 0;
+    bricked_field->texture_unit = 0;
+    bricked_field->field_boundary_indicator_name = NULL;
+    bricked_field->brick_boundary_indicator_name = NULL;
+    bricked_field->sub_brick_boundary_indicator_name = NULL;
+}
+
+void set_brick_size_exponent(unsigned int brick_size_exponent)
+{
+    configuration.requested_brick_size = pow2_size_t(brick_size_exponent);
+}
+
+void set_bricked_field_kernel_size(unsigned int kernel_size)
+{
+    check(kernel_size > 0);
+    configuration.kernel_size = kernel_size;
+}
+
+void set_min_sub_brick_size(unsigned int min_sub_brick_size)
+{
+    check(min_sub_brick_size > 0);
+    configuration.sub_brick_size_limit = 2*min_sub_brick_size;
+}
+
+void set_field_boundary_indicator_creation(int state)
+{
+    check(state == 0 || state == 1);
+    configuration.create_field_boundary_indicator = state;
+}
+
+void set_brick_boundary_indicator_creation(int state)
+{
+    check(state == 0 || state == 1);
+    configuration.create_brick_boundary_indicator = state;
+}
+
+void set_sub_brick_boundary_indicator_creation(int state)
+{
+    check(state == 0 || state == 1);
+    configuration.create_sub_brick_boundary_indicator = state;
+}
+
+void create_bricked_field(BrickedField* bricked_field, Field* field)
 {
     check(bricked_field);
     check(field);
     check(field->data);
-    check(kernel_size > 0);
 
     if (field->type != SCALAR_FIELD)
         print_severe_message("Bricking is only supported for scalar fields.");
@@ -79,17 +185,15 @@ void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned in
     const size_t field_size_y = field->size_y;
     const size_t field_size_z = field->size_z;
 
-    size_t pad_size = kernel_size - 1; // The number of voxels to pad on each side is one less than the size of the interpolation kernel
-
-    const size_t requested_brick_size = pow2_size_t(brick_size_exponent);
+    size_t pad_size = configuration.kernel_size - 1; // The number of voxels to pad on each side is one less than the size of the interpolation kernel
 
     // In the special case of using only one brick that exactly fits the field, no padding is needed
-    if (requested_brick_size == field_size_x &&
-        requested_brick_size == field_size_y &&
-        requested_brick_size == field_size_z)
+    if (configuration.requested_brick_size == field_size_x &&
+        configuration.requested_brick_size == field_size_y &&
+        configuration.requested_brick_size == field_size_z)
         pad_size = 0;
 
-    size_t padded_brick_size = max_size_t(requested_brick_size, MIN_PADDED_BRICK_SIZE);
+    size_t padded_brick_size = max_size_t(configuration.requested_brick_size, MIN_PADDED_BRICK_SIZE);
 
     // Make sure that the brick size without padding will never be smaller than the pad size
     if (padded_brick_size < 3*pad_size)
@@ -234,32 +338,136 @@ void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned in
 
     bricked_field->brick_size = brick_size;
 
-    bricked_field->texture_unit = 0;
-
-    bricked_field->field_boundary_indicator_name = NULL;
-    bricked_field->brick_boundaries_indicator_name = NULL;
-    bricked_field->sub_brick_boundaries_indicator_name = NULL;
-
     create_brick_tree(bricked_field);
+
+    if (configuration.create_field_boundary_indicator)
+        create_boundary_indicator_for_field(bricked_field);
+    else
+        bricked_field->field_boundary_indicator_name = NULL;
+
+    if (configuration.create_brick_boundary_indicator)
+        create_boundary_indicator_for_bricks(bricked_field);
+    else
+        bricked_field->brick_boundary_indicator_name = NULL;
+
+    if (configuration.create_sub_brick_boundary_indicator)
+        create_boundary_indicator_for_sub_bricks(bricked_field);
+    else
+        bricked_field->sub_brick_boundary_indicator_name = NULL;
+}
+
+void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass)
+{
+    assert(bricked_field);
+    assert(reference_corner_idx < 8);
+
+    if (!bricked_field->field_boundary_indicator_name)
+        return;
+
+    Indicator* const indicator = get_indicator(bricked_field->field_boundary_indicator_name);
+
+    const Vector3f reference_corner = extract_vector3f_from_vector4f(indicator->vertices.positions + reference_corner_idx);
+
+    glUseProgram(get_active_indicator_shader_program_id());
+    abort_on_GL_error("Could not use shader program for drawing indicator");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    unsigned int face_is_visible[6] = {0};
+
+    for (unsigned int dim = 0; dim < 3; dim++)
+    {
+        const unsigned int adjacent_face_idx = adjacent_cube_faces[reference_corner_idx][dim];
+        face_is_visible[adjacent_face_idx] = cube_face_normal_signs[adjacent_face_idx]*get_component_of_vector_from_model_point_to_camera(&reference_corner, dim) >= 0;
+    }
+
+    for (unsigned int face_idx = 0; face_idx < 6; face_idx++)
+    {
+        if ((pass == INDICATOR_FRONT_PASS && face_is_visible[face_idx]) || (pass == INDICATOR_BACK_PASS && !face_is_visible[face_idx]))
+        {
+            glDrawElements(GL_LINE_LOOP, 4, GL_UNSIGNED_INT, (GLvoid*)(4*face_idx*sizeof(unsigned int)));
+            abort_on_GL_error("Could not draw indicator");
+        }
+    }
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
+void draw_brick_boundary_indicator(const BrickedField* bricked_field)
+{
+    assert(bricked_field);
+
+    if (!bricked_field->brick_boundary_indicator_name)
+        return;
+
+    Indicator* const indicator = get_indicator(bricked_field->brick_boundary_indicator_name);
+
+    glUseProgram(get_active_indicator_shader_program_id());
+    abort_on_GL_error("Could not use shader program for drawing indicator");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    glDrawElements(GL_LINES, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
+}
+
+void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field)
+{
+    assert(bricked_field);
+
+    if (!bricked_field->sub_brick_boundary_indicator_name)
+        return;
+
+    Indicator* const indicator = get_indicator(bricked_field->sub_brick_boundary_indicator_name);
+
+    glUseProgram(get_active_indicator_shader_program_id());
+    abort_on_GL_error("Could not use shader program");
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    draw_brick_boundaries(bricked_field->tree);
+
+    glBindVertexArray(0);
+
+    glUseProgram(0);
 }
 
 void destroy_bricked_field(BrickedField* bricked_field)
 {
     check(bricked_field);
 
+    if (bricked_field->field_boundary_indicator_name)
+        destroy_indicator(bricked_field->field_boundary_indicator_name);
+
+    if (bricked_field->brick_boundary_indicator_name)
+        destroy_indicator(bricked_field->brick_boundary_indicator_name);
+
+    if (bricked_field->sub_brick_boundary_indicator_name)
+        destroy_indicator(bricked_field->sub_brick_boundary_indicator_name);
+
     destroy_brick_tree(bricked_field);
 
-    bricked_field->field = NULL;
-    bricked_field->n_bricks = 0;
+    if (bricked_field->bricks)
+    {
+        if (bricked_field->bricks[0].data)
+            free(bricked_field->bricks[0].data);
 
-    if (!bricked_field->bricks)
-        return;
+        free(bricked_field->bricks);
+    }
 
-    if (bricked_field->bricks[0].data)
-        free(bricked_field->bricks[0].data);
-
-    free(bricked_field->bricks);
-    bricked_field->bricks = NULL;
+    reset_bricked_field(bricked_field);
 }
 
 static void copy_subarray_with_cycled_layout(const float* full_input_array,
@@ -445,17 +653,17 @@ static SubBrickTreeNode* create_sub_brick_tree_nodes(const Brick* brick, const F
     unsigned int axis = level % 3;
 
     // Advance the level until a divisible axis is found or return a leaf node if none is found
-    if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+    if (end_indices.idx[axis] - start_indices.idx[axis] < configuration.sub_brick_size_limit)
     {
         level++;
         axis = level % 3;
 
-        if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+        if (end_indices.idx[axis] - start_indices.idx[axis] < configuration.sub_brick_size_limit)
         {
             level++;
             axis = level % 3;
 
-            if (end_indices.idx[axis] - start_indices.idx[axis] < sub_brick_size_limit)
+            if (end_indices.idx[axis] - start_indices.idx[axis] < configuration.sub_brick_size_limit)
             {
                 return node;
             }
@@ -564,4 +772,146 @@ static void destroy_sub_brick_tree_node(SubBrickTreeNode* node)
         destroy_sub_brick_tree_node(node->upper_child);
 
     free(node);
+}
+
+static void create_boundary_indicator_for_field(BrickedField* bricked_field)
+{
+    check(bricked_field);
+
+    Field* const field = bricked_field->field;
+
+    const DynamicString name = create_string("field_boundaries_%d", field_boundary_indicator_count++);
+    Indicator* const indicator = create_indicator(&name, 8, 24);
+
+    Vector3f lower_corner = {{-field->halfwidth, -field->halfheight, -field->halfdepth}};
+    Vector3f extent = {{2*field->halfwidth, 2*field->halfheight, 2*field->halfdepth}};
+
+    size_t vertex_idx = 0;
+    set_cube_vertex_positions_for_indicator(indicator, &vertex_idx, &lower_corner, &extent);
+
+    size_t index_idx = 0;
+    set_cube_edges_for_indicator(indicator, 0, &index_idx);
+
+    set_vertex_colors_for_indicator(indicator, 0, indicator->n_vertices, &field_boundary_color);
+
+    load_buffer_data_for_indicator(indicator);
+
+    bricked_field->field_boundary_indicator_name = indicator->name.chars;
+}
+
+static void create_boundary_indicator_for_bricks(BrickedField* bricked_field)
+{
+    check(bricked_field);
+
+    const DynamicString name = create_string("brick_boundaries_%d", brick_boundary_indicator_count++);
+    Indicator* const indicator = create_indicator(&name, 8*bricked_field->n_bricks, 24*bricked_field->n_bricks);
+
+    size_t vertex_idx = 0;
+    size_t index_idx = 0;
+
+    for (size_t brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        const Brick* const brick = bricked_field->bricks + brick_idx;
+        set_cube_edges_for_indicator(indicator, vertex_idx, &index_idx);
+        set_cube_vertex_positions_for_indicator(indicator, &vertex_idx, &brick->spatial_offset, &brick->spatial_extent);
+    }
+
+    set_vertex_colors_for_indicator(indicator, 0, indicator->n_vertices, &brick_boundary_color);
+
+    load_buffer_data_for_indicator(indicator);
+
+    bricked_field->brick_boundary_indicator_name = indicator->name.chars;
+}
+
+static void create_boundary_indicator_for_sub_bricks(BrickedField* bricked_field)
+{
+    check(bricked_field);
+
+    size_t brick_idx;
+    size_t n_sub_bricks = 0;
+
+    for (brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        const Brick* const brick = bricked_field->bricks + brick_idx;
+        n_sub_bricks += 1 + brick->tree->n_children;
+    }
+
+    const DynamicString name = create_string("sub_brick_boundaries_%d", sub_brick_boundary_indicator_count++);
+    Indicator* const indicator = create_indicator(&name, 8*n_sub_bricks, 24*n_sub_bricks);
+
+    size_t vertex_idx = 0;
+    size_t index_idx = 0;
+
+    for (brick_idx = 0; brick_idx < bricked_field->n_bricks; brick_idx++)
+    {
+        Brick* const brick = bricked_field->bricks + brick_idx;
+        set_sub_brick_boundary_indicator_data(indicator, brick->tree, &vertex_idx, &index_idx);
+    }
+
+    set_vertex_colors_for_indicator(indicator, 0, indicator->n_vertices, &sub_brick_boundary_color);
+
+    load_buffer_data_for_indicator(indicator);
+
+    bricked_field->sub_brick_boundary_indicator_name = indicator->name.chars;
+}
+
+static void set_sub_brick_boundary_indicator_data(Indicator* indicator, SubBrickTreeNode* node, size_t* running_vertex_idx, size_t* running_index_idx)
+{
+    assert(indicator);
+    assert(node);
+    assert(running_vertex_idx);
+    assert(running_index_idx);
+
+    if (node->lower_child)
+        set_sub_brick_boundary_indicator_data(indicator, node->lower_child, running_vertex_idx, running_index_idx);
+
+    if (node->upper_child)
+        set_sub_brick_boundary_indicator_data(indicator, node->upper_child, running_vertex_idx, running_index_idx);
+
+    node->indicator_idx = *running_index_idx;
+    set_cube_edges_for_indicator(indicator, *running_vertex_idx, running_index_idx);
+    set_cube_vertex_positions_for_indicator(indicator, running_vertex_idx, &node->spatial_offset, &node->spatial_extent);
+}
+
+static void draw_brick_boundaries(const BrickTreeNode* node)
+{
+    assert(node);
+
+    if (node->visibility == REGION_INVISIBLE || node->visibility == REGION_CLIPPED)
+        return;
+
+    if (node->brick)
+    {
+        draw_sub_brick_boundaries(node->brick->tree);
+    }
+    else
+    {
+        if (node->lower_child)
+            draw_brick_boundaries(node->lower_child);
+
+        if (node->upper_child)
+            draw_brick_boundaries(node->upper_child);
+    }
+}
+
+static void draw_sub_brick_boundaries(const SubBrickTreeNode* node)
+{
+    assert(node);
+
+    if (node->visibility == REGION_INVISIBLE || node->visibility == REGION_CLIPPED)
+        return;
+
+    if (node->visibility == REGION_VISIBLE)
+    {
+        glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, (GLvoid*)(node->indicator_idx*sizeof(unsigned int)));
+        abort_on_GL_error("Could not draw indicator");
+    }
+    else
+    {
+        if (node->lower_child)
+            draw_sub_brick_boundaries(node->lower_child);
+
+        if (node->upper_child)
+            draw_sub_brick_boundaries(node->upper_child);
+    }
 }

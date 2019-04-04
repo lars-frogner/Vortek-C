@@ -4,6 +4,7 @@
 #include "gl_includes.h"
 #include "geometry.h"
 #include "fields.h"
+#include "indicators.h"
 
 #include <stddef.h>
 
@@ -75,13 +76,27 @@ typedef struct BrickedField
     size_t brick_size;
     GLuint texture_unit;
     const char* field_boundary_indicator_name;
-    const char* brick_boundaries_indicator_name;
-    const char* sub_brick_boundaries_indicator_name;
+    const char* brick_boundary_indicator_name;
+    const char* sub_brick_boundary_indicator_name;
 } BrickedField;
 
-void set_min_sub_brick_size(unsigned int size);
+void initialize_bricks(void);
 
-void create_bricked_field(BrickedField* bricked_field, Field* field, unsigned int brick_size_exponent, unsigned int kernel_size);
+void reset_bricked_field(BrickedField* bricked_field);
+
+void set_brick_size_exponent(unsigned int brick_size_exponent);
+void set_bricked_field_kernel_size(unsigned int kernel_size);
+void set_min_sub_brick_size(unsigned int min_sub_brick_size);
+
+void set_field_boundary_indicator_creation(int state);
+void set_brick_boundary_indicator_creation(int state);
+void set_sub_brick_boundary_indicator_creation(int state);
+
+void create_bricked_field(BrickedField* bricked_field, Field* field);
+
+void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned int reference_corner_idx, enum indicator_drawing_pass pass);
+void draw_brick_boundary_indicator(const BrickedField* bricked_field);
+void draw_sub_brick_boundary_indicator(const BrickedField* bricked_field);
 
 void destroy_bricked_field(BrickedField* bricked_field);
 
