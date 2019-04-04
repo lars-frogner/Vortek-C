@@ -47,6 +47,15 @@ typedef struct ClipPlaneController
 static void generate_shader_code_for_clip_planes(void);
 static void sync_clip_plane(unsigned int idx);
 
+static void create_boundary_indicator(unsigned int idx);
+static void create_normal_indicator(void);
+
+static void update_boundary_indicator(unsigned int idx);
+static void update_normal_indicator(void);
+
+static void draw_boundary_indicator(unsigned int idx);
+static void draw_normal_indicator(void);
+
 
 // Corner positions of a (twice) unit axis aligned cube centered on the origin
 static const Vector3f centered_corners[8] = {{{-1, -1, -1}},
@@ -114,17 +123,10 @@ void load_clip_planes(void)
         load_uniform(active_shader_program, &clip_planes[idx].origin_shift_uniform);
         reset_clip_plane(idx);
 
-        clip_planes[idx].boundary_indicator_name =
-            add_boundary_indicator_for_clip_plane(idx,
-                                                  &clip_planes[idx].normal,
-                                                  clip_planes[idx].origin_shift,
-                                                  clip_planes[idx].axis_aligned_box_back_corner,
-                                                  &clip_planes[idx].color);
+        create_boundary_indicator(idx);
     }
 
-    normal_indicator_name = add_normal_indicator_for_clip_planes(&clip_planes[controller.controllable_idx].normal,
-                                                                 clip_planes[controller.controllable_idx].origin_shift,
-                                                                 &clip_planes[controller.controllable_idx].color);
+    create_normal_indicator();
 }
 
 void set_max_clip_plane_origin_shifts(float max_x, float max_y, float max_z)
@@ -177,11 +179,7 @@ void set_controllable_clip_plane(unsigned int idx)
     if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
     {
         controller.controllable_idx = idx;
-
-        update_clip_plane_normal_indicator(normal_indicator_name,
-                                           &clip_planes[idx].normal,
-                                           clip_planes[idx].origin_shift,
-                                           &clip_planes[idx].color);
+        update_normal_indicator();
     }
 }
 
@@ -312,14 +310,19 @@ void clip_plane_control_reset_origin_shift_callback(void)
 
 void draw_clip_planes(void)
 {
+    glUseProgram(get_active_indicator_shader_program_id());
+    abort_on_GL_error("Could not use shader program for drawing indicator");
+
     for (unsigned int idx = 0; idx < MAX_CLIP_PLANES; idx++)
     {
         if (clip_planes[idx].state == CLIP_PLANE_ENABLED)
-            draw_clip_plane_boundary_indicator(clip_planes[idx].boundary_indicator_name);
+            draw_boundary_indicator(idx);
     }
 
     if (controller.state == CONTROL && clip_planes[controller.controllable_idx].state == CLIP_PLANE_ENABLED)
-        draw_clip_plane_normal_indicator(normal_indicator_name);
+        draw_normal_indicator();
+
+    glUseProgram(0);
 }
 
 void reset_clip_plane(unsigned int idx)
@@ -365,7 +368,12 @@ void cleanup_clip_planes(void)
     {
         destroy_uniform(&clip_planes[idx].normal_uniform);
         destroy_uniform(&clip_planes[idx].origin_shift_uniform);
+        destroy_indicator(clip_planes[idx].boundary_indicator_name);
     }
+
+    destroy_indicator(normal_indicator_name);
+
+    active_shader_program = NULL;
 }
 
 static void generate_shader_code_for_clip_planes(void)
@@ -425,16 +433,10 @@ static void sync_clip_plane(unsigned int idx)
         glUniform1fv(clip_planes[idx].origin_shift_uniform.location, 1, (const GLfloat*)(&clip_planes[idx].origin_shift));
         abort_on_GL_error("Could not update clip plane origin distance uniform");
 
-        update_clip_plane_boundary_indicator(clip_planes[idx].boundary_indicator_name,
-                                             &clip_planes[idx].normal,
-                                             clip_planes[idx].origin_shift,
-                                             clip_planes[idx].axis_aligned_box_back_corner);
+        update_boundary_indicator(idx);
 
         if (idx == controller.controllable_idx)
-            update_clip_plane_normal_indicator(normal_indicator_name,
-                                               &clip_planes[idx].normal,
-                                               clip_planes[idx].origin_shift,
-                                               &clip_planes[idx].color);
+            update_normal_indicator();
     }
     else
     {
@@ -446,4 +448,103 @@ static void sync_clip_plane(unsigned int idx)
     }
 
     glUseProgram(0);
+}
+
+static void create_boundary_indicator(unsigned int idx)
+{
+    assert(idx < MAX_CLIP_PLANES);
+
+    const DynamicString name = create_string("clip_plane_%d_boundaries", idx);
+    Indicator* const indicator = create_indicator(&name, 6, 6);
+
+    for (unsigned int vertex_idx = 0; vertex_idx < 6; vertex_idx++)
+        set_vector4f_elements(indicator->vertices.positions + vertex_idx, 0.0f, 0.0f, 0.0f, 1.0f);
+
+    for (unsigned int index_idx = 0; index_idx < 6; index_idx++)
+        indicator->index_buffer[index_idx] = index_idx;
+
+    set_vertex_colors_for_indicator(indicator, 0, indicator->n_vertices, &clip_planes[idx].color);
+
+    load_buffer_data_for_indicator(indicator);
+
+    clip_planes[idx].boundary_indicator_name = indicator->name.chars;
+}
+
+static void create_normal_indicator(void)
+{
+    const DynamicString name = create_string("clip_plane_normal");
+    Indicator* const indicator = create_indicator(&name, 2, 2);
+
+    set_vector4f_elements(indicator->vertices.positions + 0, 0.0f, 0.0f, 0.0f, 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + 1, 0.0f, 0.0f, 0.0f, 1.0f);
+
+    indicator->index_buffer[0] = 0;
+    indicator->index_buffer[1] = 1;
+
+    set_vertex_colors_for_indicator(indicator, 0, indicator->n_vertices, get_full_standard_color(COLOR_BLACK));
+
+    load_buffer_data_for_indicator(indicator);
+
+    normal_indicator_name = indicator->name.chars;
+}
+
+static void update_boundary_indicator(unsigned int idx)
+{
+    Indicator* const indicator = get_indicator(clip_planes[idx].boundary_indicator_name);
+
+    for (unsigned int vertex_idx = 0; vertex_idx < 6; vertex_idx++)
+        compute_plane_bounding_box_intersection_vertex(&clip_planes[idx].normal,
+                                                       clip_planes[idx].origin_shift,
+                                                       clip_planes[idx].axis_aligned_box_back_corner,
+                                                       vertex_idx,
+                                                       indicator->vertices.positions + vertex_idx);
+
+    update_position_buffer_data_for_indicator(indicator);
+}
+
+static void update_normal_indicator(void)
+{
+    Indicator* const indicator = get_indicator(normal_indicator_name);
+
+    Vector3f* const normal = &clip_planes[controller.controllable_idx].normal;
+    const float origin_shift = clip_planes[controller.controllable_idx].origin_shift;
+    Color* const color = &clip_planes[controller.controllable_idx].color;
+
+    set_vector4f_elements(indicator->vertices.positions + 0, 0.0f, 0.0f, 0.0f, 1.0f);
+    set_vector4f_elements(indicator->vertices.positions + 1, origin_shift*normal->a[0], origin_shift*normal->a[1], origin_shift*normal->a[2], 1.0f);
+
+    set_vertex_colors_for_indicator(indicator, 0, 2, color);
+
+    update_vertex_buffer_data_for_indicator(indicator);
+}
+
+static void draw_boundary_indicator(unsigned int idx)
+{
+    Indicator* const indicator = get_indicator(clip_planes[idx].boundary_indicator_name);
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    glDrawElements(GL_LINE_LOOP, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glBindVertexArray(0);
+}
+
+static void draw_normal_indicator(void)
+{
+    Indicator* const indicator = get_indicator(normal_indicator_name);
+
+    assert(indicator->vertex_array_object_id > 0);
+    glBindVertexArray(indicator->vertex_array_object_id);
+    abort_on_GL_error("Could not bind VAO for drawing indicator");
+
+    glDrawElements(GL_LINES, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glDrawElements(GL_POINTS, (GLsizei)indicator->n_indices, GL_UNSIGNED_INT, (GLvoid*)0);
+    abort_on_GL_error("Could not draw indicator");
+
+    glBindVertexArray(0);
 }
