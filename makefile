@@ -46,14 +46,14 @@ DEP_FLAGS = -MT $@ -MMD -MP -MF ${DEP_DIR}/$*.Td
 
 HEADER_PATH_FLAGS := -I${INCLUDE_DIR} -I${EXTERNAL_DIR}/include
 
-LIBRARY_PATH_FLAGS := -L${EXTERNAL_DIR}
+LIBRARY_PATH_FLAGS := -L${EXTERNAL_DIR}/lib
 LIBRARY_LINKING_FLAGS := -lglfw
 
 COMPILATION_FLAGS := -march=native -mtune=native
 LINKING_FLAGS := -march=native -mtune=native
 
-DEBUGGING_COMPILATION_FLAGS := -g -O0 -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter
-DEBUGGING_LINKING_FLAGS :=
+DEBUGGING_COMPILATION_FLAGS := -g -O0 -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
+DEBUGGING_LINKING_FLAGS := -fsanitize=address
 
 PERFORMANCE_COMPILATION_FLAGS := -O3 -ffast-math
 PERFORMANCE_LINKING_FLAGS := ${PERFORMANCE_COMPILATION_FLAGS}
@@ -64,13 +64,11 @@ ifeq (${OS},Windows_NT)
 else
 	UNAME_S := $(shell uname -s)
 	ifeq (${UNAME_S},Linux)
-
+		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU
 	endif
 	ifeq (${UNAME_S},Darwin)
-		COMPILATION_FLAGS           += -Wno-deprecated-declarations
-		LINKING_FLAGS               += -framework OpenGL
-		DEBUGGING_COMPILATION_FLAGS += -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
-		DEBUGGING_LINKING_FLAGS     += -fsanitize=address
+		COMPILATION_FLAGS     += -Wno-deprecated-declarations
+		LINKING_FLAGS         += -framework OpenGL
 	endif
 endif
 

@@ -7,14 +7,37 @@ PLATFORM=$(uname -s)
 if [ ${PLATFORM} == Darwin ]; then
 
     echo "Checking for brew"
-    if ! brew --version ; then
-        echo "Error: brew not found"
-        exit 1
+    if ! brew --version > /dev/null ; then
+        echo "Installation of brew required"
+        echo "This will run the command \"ruby -e \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)\"\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing brew"
+            ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+        else
+            echo "Aborted"
+            exit 0
+        fi
     fi
 
+    echo "Checking for glfw3"
     if ! brew ls --versions glfw3 > /dev/null ; then
-        echo "Installing GLFW"
-        brew install glfw3
+
+        echo "Installation of glfw3 required"
+        echo "This will run the command \"brew install glfw3\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing glfw3"
+            brew install glfw3
+        else
+            echo "Aborted"
+            exit 0
+        fi
+
     fi
 
     GLFW_DIR=$(brew --prefix glfw3)
@@ -28,6 +51,22 @@ if [ ${PLATFORM} == Darwin ]; then
     ln -sfv ${GLFW_DIR}/lib/* external/lib
 
 else
+
+    echo "Checking for curl"
+    if ! curl --version > /dev/null ; then
+        echo "Installation of curl required"
+        echo "This will run the command \"sudo apt install curl\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing curl"
+            sudo apt install curl
+        else
+            echo "Aborted"
+            exit 0
+        fi
+    fi
 
     GLFW_DIR="${PWD}/glfw_latest"
 
@@ -51,9 +90,51 @@ else
     fi
 
     echo "Checking for cmake"
-    if ! cmake --version ; then
-        echo "Error: cmake not found"
-        exit 1
+    if ! cmake --version > /dev/null ; then
+        echo "Installation of cmake required"
+        echo "This will run the command \"sudo apt install cmake\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing cmake"
+            sudo apt install cmake
+        else
+            echo "Aborted"
+            exit 0
+        fi
+    fi
+
+    echo "Checking for xorg-dev"
+    if ! dpkg -s xorg-dev > /dev/null ; then
+        echo "Installation of xorg-dev required"
+        echo "This will run the command \"sudo apt install xorg-dev\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing xorg-dev"
+            sudo apt install xorg-dev
+        else
+            echo "Aborted"
+            exit 0
+        fi
+    fi
+
+    echo "Checking for libglu1-mesa-dev"
+    if ! dpkg -s libglu1-mesa-dev > /dev/null ; then
+        echo "Installation of libglu1-mesa-dev required"
+        echo "This will run the command \"sudo apt install libglu1-mesa-dev\""
+        read -p "Do you want to continue? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing libglu1-mesa-dev"
+            sudo apt install libglu1-mesa-dev
+        else
+            echo "Aborted"
+            exit 0
+        fi
     fi
 
     echo "Running cmake"
