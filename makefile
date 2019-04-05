@@ -66,7 +66,7 @@ else
 	UNAME_S := $(shell uname -s)
 	ifeq (${UNAME_S},Linux)
 		OPERATING_SYSTEM      := linux
-		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU
+		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU -Wl,-rpath='$$ORIGIN/${EXTERNAL_DIR}/lib'
 	endif
 	ifeq (${UNAME_S},Darwin)
 		OPERATING_SYSTEM  := macos
