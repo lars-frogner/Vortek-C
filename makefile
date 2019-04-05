@@ -60,13 +60,16 @@ PERFORMANCE_LINKING_FLAGS := ${PERFORMANCE_COMPILATION_FLAGS}
 
 # Add operating system specific flags
 ifeq (${OS},Windows_NT)
+	OPERATING_SYSTEM := win
     $(error This makefile does not support Windows)
 else
 	UNAME_S := $(shell uname -s)
 	ifeq (${UNAME_S},Linux)
+		OPERATING_SYSTEM := linux
 		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU
 	endif
 	ifeq (${UNAME_S},Darwin)
+		OPERATING_SYSTEM := mac
 		COMPILATION_FLAGS     += -Wno-deprecated-declarations
 		LINKING_FLAGS         += -framework OpenGL
 	endif
@@ -108,7 +111,11 @@ else
 	HEADER_PATH_FLAGS += -I$(shell ${PYTHON_COMMAND} -c "import distutils.sysconfig; print(distutils.sysconfig.get_python_inc())")
 	HEADER_PATH_FLAGS += -I$(shell ${PYTHON_COMMAND} -c "import numpy; print(numpy.get_include())")/numpy
 	COMPILATION_FLAGS += -fpic
-	LINKING_FLAGS     += -shared -undefined dynamic_lookup
+	LINKING_FLAGS     += -shared
+
+	ifeq (${OPERATING_SYSTEM},mac)
+		LINKING_FLAGS += -undefined dynamic_lookup
+	endif
 endif
 
 # Command for compiling sources
