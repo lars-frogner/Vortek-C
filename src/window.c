@@ -69,8 +69,8 @@ void initialize_window(void)
     int screen_width, screen_height;
     get_screen_resolution(&screen_width, &screen_height);
 
-    window.handle = glfwCreateWindow((int)(screen_height*DEFAULT_WINDOW_HEIGHT_FRACTION*DEFAULT_WINDOW_ASPECT_RATIO),
-                                     (int)(screen_height*DEFAULT_WINDOW_HEIGHT_FRACTION),
+    window.handle = glfwCreateWindow((int)((float)screen_height*DEFAULT_WINDOW_HEIGHT_FRACTION*DEFAULT_WINDOW_ASPECT_RATIO),
+                                     (int)((float)screen_height*DEFAULT_WINDOW_HEIGHT_FRACTION),
                                      WINDOW_TITLE, NULL, NULL);
 
     if (!window.handle)
@@ -150,7 +150,7 @@ void get_window_shape_in_screen_coordinates(int* width, int* height)
 
 float get_window_aspect_ratio(void)
 {
-    return (float)window.width_pixels/window.height_pixels;
+    return (float)window.width_pixels/(float)window.height_pixels;
 }
 
 void cleanup_window(void)

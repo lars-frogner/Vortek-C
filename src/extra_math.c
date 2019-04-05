@@ -62,7 +62,7 @@ float clamp(float x, float lower, float upper)
 
 size_t pow2_size_t(unsigned int exponent)
 {
-    return 1 << (size_t)exponent;
+    return 1u << (size_t)exponent;
 }
 
 unsigned int floored_log2_size_t(size_t number)

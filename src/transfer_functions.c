@@ -466,7 +466,7 @@ static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer
         }
     }
 
-    return (float)n_visible_voxels/(node->size_x*node->size_y*node->size_z);
+    return (float)n_visible_voxels/(float)(node->size_x*node->size_y*node->size_z);
 }
 
 static void transfer_transfer_function_texture(TransferFunctionTexture* transfer_function_texture)
@@ -671,7 +671,7 @@ static void compute_linear_array_segment(float* segment, size_t segment_length, 
     assert(segment_length > 1);
 
     size_t i;
-    const float scale = (end_value - start_value)/(segment_length - 1);
+    const float scale = (end_value - start_value)/(float)(segment_length - 1);
 
     for (i = 0; i < segment_length; i++)
         segment[i*stride] = start_value + i*scale;
@@ -686,8 +686,8 @@ static void compute_logarithmic_array_segment(float* segment, size_t segment_len
 
     size_t i;
     const float offset = powf(10, start_value);
-    const float scale = (powf(10, end_value) - offset)/(segment_length - 1);
+    const float scale = (powf(10, end_value) - offset)/(float)(segment_length - 1);
 
     for (i = 0; i < segment_length; i++)
-        segment[i*stride] = log10f(i*scale + offset);
+        segment[i*stride] = log10f((float)i*scale + offset);
 }

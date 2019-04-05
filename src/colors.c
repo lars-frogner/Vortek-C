@@ -39,9 +39,9 @@ Color create_standard_color(enum standard_color color, float alpha)
 Color create_hex_color(int hex_color, float alpha)
 {
     check(alpha >= 0 && alpha <= 1);
-    Color result = {((hex_color >> 16) & 0xFF)/255.0f,
-                    ((hex_color >>  8) & 0xFF)/255.0f,
-                    ((hex_color >>  0) & 0xFF)/255.0f,
+    Color result = {(float)((hex_color >> 16) & 0xFF)/255.0f,
+                    (float)((hex_color >>  8) & 0xFF)/255.0f,
+                    (float)((hex_color >>  0) & 0xFF)/255.0f,
                     alpha};
     return result;
 }

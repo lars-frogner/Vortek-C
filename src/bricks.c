@@ -295,19 +295,19 @@ void create_bricked_field(BrickedField* bricked_field, Field* field)
                 brick->size_z = unpadded_brick_size_z - (k == 0)*pad_size - (k == n_bricks_z - 1)*pad_size;
 
                 set_vector3f_elements(&brick->spatial_offset,
-                                      brick->offset_x*field->voxel_width  - field->halfwidth,
-                                      brick->offset_y*field->voxel_height - field->halfheight,
-                                      brick->offset_z*field->voxel_depth  - field->halfdepth);
+                                      (float)brick->offset_x*field->voxel_width  - field->halfwidth,
+                                      (float)brick->offset_y*field->voxel_height - field->halfheight,
+                                      (float)brick->offset_z*field->voxel_depth  - field->halfdepth);
 
                 set_vector3f_elements(&brick->spatial_extent,
-                                      brick->size_x*field->voxel_width,
-                                      brick->size_y*field->voxel_height,
-                                      brick->size_z*field->voxel_depth);
+                                      (float)brick->size_x*field->voxel_width,
+                                      (float)brick->size_y*field->voxel_height,
+                                      (float)brick->size_z*field->voxel_depth);
 
                 set_vector3f_elements(&brick->pad_fractions,
-                                      (float)pad_size/padded_brick_size_x,
-                                      (float)pad_size/padded_brick_size_y,
-                                      (float)pad_size/padded_brick_size_z);
+                                      (float)pad_size/(float)padded_brick_size_x,
+                                      (float)pad_size/(float)padded_brick_size_y,
+                                      (float)pad_size/(float)padded_brick_size_z);
 
                 data_offset += padded_brick_size_x*padded_brick_size_y*padded_brick_size_z;
 
@@ -380,7 +380,8 @@ void draw_field_boundary_indicator(const BrickedField* bricked_field, unsigned i
     for (unsigned int dim = 0; dim < 3; dim++)
     {
         const unsigned int adjacent_face_idx = adjacent_cube_faces[reference_corner_idx][dim];
-        face_is_visible[adjacent_face_idx] = cube_face_normal_signs[adjacent_face_idx]*get_component_of_vector_from_model_point_to_camera(&reference_corner, dim) >= 0;
+        face_is_visible[adjacent_face_idx] = (float)cube_face_normal_signs[adjacent_face_idx]
+                                             *get_component_of_vector_from_model_point_to_camera(&reference_corner, dim) >= 0;
     }
 
     for (unsigned int face_idx = 0; face_idx < 6; face_idx++)
@@ -581,7 +582,7 @@ static BrickTreeNode* create_brick_tree_nodes(BrickedField* bricked_field, unsig
     node->split_axis = axis;
 
     // Subdivide along the current axis as close to the middle as possible
-    const size_t middle_idx = (size_t)(0.5f*(start_indices.idx[axis] + end_indices.idx[axis] + 1));
+    const size_t middle_idx = (size_t)(0.5f*(float)(start_indices.idx[axis] + end_indices.idx[axis] + 1));
     assert(middle_idx > start_indices.idx[axis] && end_indices.idx[axis] > middle_idx);
 
     // Create child node for the lower interval
@@ -673,7 +674,7 @@ static SubBrickTreeNode* create_sub_brick_tree_nodes(const Brick* brick, const F
     node->split_axis = axis;
 
     // Subdivide along the current axis as close to the middle as possible (rounding down)
-    const size_t middle_idx = (size_t)(0.5f*(start_indices.idx[axis] + end_indices.idx[axis]));
+    const size_t middle_idx = (size_t)(0.5f*(float)(start_indices.idx[axis] + end_indices.idx[axis]));
     assert(middle_idx > start_indices.idx[axis] && end_indices.idx[axis] > middle_idx);
 
     // Create child node for the lower interval
@@ -710,14 +711,14 @@ static SubBrickTreeNode* create_sub_brick_tree_node(const Brick* brick, const Fi
     node->size_z = end_indices.idx[2] - start_indices.idx[2];
 
     set_vector3f_elements(&node->spatial_offset,
-                          brick->spatial_offset.a[0] + start_indices.idx[0]*field->voxel_width,
-                          brick->spatial_offset.a[1] + start_indices.idx[1]*field->voxel_height,
-                          brick->spatial_offset.a[2] + start_indices.idx[2]*field->voxel_depth);
+                          brick->spatial_offset.a[0] + (float)start_indices.idx[0]*field->voxel_width,
+                          brick->spatial_offset.a[1] + (float)start_indices.idx[1]*field->voxel_height,
+                          brick->spatial_offset.a[2] + (float)start_indices.idx[2]*field->voxel_depth);
 
     set_vector3f_elements(&node->spatial_extent,
-                          node->size_x*field->voxel_width,
-                          node->size_y*field->voxel_height,
-                          node->size_z*field->voxel_depth);
+                          (float)node->size_x*field->voxel_width,
+                          (float)node->size_y*field->voxel_height,
+                          (float)node->size_z*field->voxel_depth);
 
     node->visibility_ratio = 1.0f;
     node->visibility = UNDETERMINED_REGION_VISIBILITY;

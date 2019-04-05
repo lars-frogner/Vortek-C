@@ -114,7 +114,7 @@ void renderer_update_callback(void)
 
 void renderer_resize_callback(int width, int height)
 {
-    update_camera_aspect_ratio((float)width/height);
+    update_camera_aspect_ratio((float)width/(float)height);
     glViewport(0, 0, width, height);
 }
 

@@ -328,7 +328,7 @@ void set_plane_separation(float spacing_multiplier)
 
     plane_separation.value = min_voxel_extent*spacing_multiplier;
 
-    const unsigned int max_n_planes = (unsigned int)(bricked_field->brick_size*max_voxel_extent/plane_separation.value) + 1;
+    const unsigned int max_n_planes = (unsigned int)((float)bricked_field->brick_size*max_voxel_extent/plane_separation.value) + 1;
 
     if (max_n_planes < 2)
         print_severe_message("Cannot create fewer than two planes.");

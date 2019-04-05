@@ -92,9 +92,9 @@ const char* create_field_from_bifrost_file(const char* name, const char* data_fi
 
     float* data = (float*)read_binary_file(data_filename, length, sizeof(float));
 
-    const float physical_extent_x = (size_x - 1)*dx;
-    const float physical_extent_y = (size_y - 1)*dy;
-    const float physical_extent_z = (size_z - 1)*dz;
+    const float physical_extent_x = (float)(size_x - 1)*dx;
+    const float physical_extent_y = (float)(size_y - 1)*dy;
+    const float physical_extent_z = (float)(size_z - 1)*dz;
 
     return create_field(name, SCALAR_FIELD, data,
                         size_x, size_y, size_z,
@@ -169,9 +169,9 @@ const char* create_field(const char* name,
     field->halfheight = spatial_normalization*physical_extent_y;
     field->halfdepth = spatial_normalization*physical_extent_z;
 
-    field->voxel_width = 2*field->halfwidth/size_x;
-    field->voxel_height = 2*field->halfheight/size_y;
-    field->voxel_depth = 2*field->halfdepth/size_z;
+    field->voxel_width = 2*field->halfwidth/(float)size_x;
+    field->voxel_height = 2*field->halfheight/(float)size_y;
+    field->voxel_depth = 2*field->halfdepth/(float)size_z;
 
     field->physical_extent_scale = 0.5f*max_physical_extent;
 
