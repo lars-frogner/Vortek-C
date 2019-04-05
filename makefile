@@ -60,18 +60,18 @@ PERFORMANCE_LINKING_FLAGS := ${PERFORMANCE_COMPILATION_FLAGS}
 
 # Add operating system specific flags
 ifeq (${OS},Windows_NT)
-	OPERATING_SYSTEM := win
+	OPERATING_SYSTEM := windows
     $(error This makefile does not support Windows)
 else
 	UNAME_S := $(shell uname -s)
 	ifeq (${UNAME_S},Linux)
-		OPERATING_SYSTEM := linux
+		OPERATING_SYSTEM      := linux
 		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU
 	endif
 	ifeq (${UNAME_S},Darwin)
-		OPERATING_SYSTEM := mac
-		COMPILATION_FLAGS     += -Wno-deprecated-declarations
-		LINKING_FLAGS         += -framework OpenGL
+		OPERATING_SYSTEM  := macos
+		COMPILATION_FLAGS += -Wno-deprecated-declarations
+		LINKING_FLAGS     += -framework OpenGL
 	endif
 endif
 
@@ -113,7 +113,7 @@ else
 	COMPILATION_FLAGS += -fpic
 	LINKING_FLAGS     += -shared
 
-	ifeq (${OPERATING_SYSTEM},mac)
+	ifeq (${OPERATING_SYSTEM},macos)
 		LINKING_FLAGS += -undefined dynamic_lookup
 	endif
 endif
