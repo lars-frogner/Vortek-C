@@ -72,10 +72,18 @@ else
 	endif
 endif
 
-ifdef MAKE_PYTHON_VORTEK
+ifdef MAKE_VORTEK_EXECUTABLE
+	BINARY       := ${EXECUTABLE_BINARY}
+	SOURCE_FILES += ${EXECUTABLE_SOURCE}
+	OBJECT_FILES += ${EXECUTABLE_OBJECT}
+else
 	PYTHON_STATUS := $(shell python --version > /dev/null 2>&1 ; echo $$?)
 	ifneq (${PYTHON_STATUS},0)
         $(error Python not found)
+	endif
+	PYTHON_VERSION_NOT_3 := $(shell python -c "import sys; print(\"%i\" % (sys.hexversion < 0x03000000))")
+	ifneq (${PYTHON_VERSION_NOT_3},0)
+        $(error Requires Python 3.x)
 	endif
 	BINARY            := ${PYTHON_MODULE_BINARY}
 	SOURCE_FILES      += ${PYTHON_MODULE_SOURCE}
@@ -84,10 +92,6 @@ ifdef MAKE_PYTHON_VORTEK
 	HEADER_PATH_FLAGS += -I$(shell python -c "import numpy; print(numpy.get_include())")/numpy
 	COMPILATION_FLAGS += -fpic
 	LINKING_FLAGS     += -shared -undefined dynamic_lookup
-else
-	BINARY       := ${EXECUTABLE_BINARY}
-	SOURCE_FILES += ${EXECUTABLE_SOURCE}
-	OBJECT_FILES += ${EXECUTABLE_OBJECT}
 endif
 
 # Command for compiling sources

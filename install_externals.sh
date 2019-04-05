@@ -22,7 +22,7 @@ if [ ${PLATFORM} == Darwin ]; then
     fi
 
     echo "Checking for glfw3"
-    if ! brew ls --versions glfw3 > /dev/null ; then
+    if ! brew ls --versions glfw3 > /dev/null 2>&1 ; then
 
         echo "Installation of glfw3 required"
         echo "This will run the command \"brew install glfw3\""
@@ -102,7 +102,7 @@ else
     fi
 
     echo "Checking for xorg-dev"
-    if ! dpkg -s xorg-dev > /dev/null ; then
+    if ! dpkg -s xorg-dev > /dev/null 2>&1 ; then
         echo "Installation of xorg-dev required"
         echo "This will run the command \"sudo apt install xorg-dev\""
         read -p "Do you want to continue? [y/N] " -r
@@ -117,7 +117,7 @@ else
     fi
 
     echo "Checking for libglu1-mesa-dev"
-    if ! dpkg -s libglu1-mesa-dev > /dev/null ; then
+    if ! dpkg -s libglu1-mesa-dev > /dev/null 2>&1 ; then
         echo "Installation of libglu1-mesa-dev required"
         echo "This will run the command \"sudo apt install libglu1-mesa-dev\""
         read -p "Do you want to continue? [y/N] " -r
