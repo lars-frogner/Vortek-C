@@ -674,7 +674,7 @@ static void compute_linear_array_segment(float* segment, size_t segment_length, 
     const float scale = (end_value - start_value)/(float)(segment_length - 1);
 
     for (i = 0; i < segment_length; i++)
-        segment[i*stride] = start_value + i*scale;
+        segment[i*stride] = start_value + (float)i*scale;
 }
 
 static void compute_logarithmic_array_segment(float* segment, size_t segment_length, unsigned int stride,
