@@ -8,6 +8,7 @@
     #ifdef _WIN32
         #include <windows.h>
     #endif
+    #define GL_GLEXT_PROTOTYPES
     #include <GL/glcorearb.h>
     #include <GL/glu.h>
 #endif
