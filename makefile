@@ -78,18 +78,30 @@ ifdef MAKE_VORTEK_EXECUTABLE
 	OBJECT_FILES += ${EXECUTABLE_OBJECT}
 else
 	PYTHON_COMMAND := python
-	PYTHON_STATUS := $(shell python --version > /dev/null 2>&1 ; echo $$?)
+	PYTHON_STATUS := $(shell ${PYTHON_COMMAND} --version > /dev/null 2>&1 ; echo $$?)
 	ifneq (${PYTHON_STATUS},0)
         $(error No valid Python interpreter found)
 	endif
-	PYTHON_VERSION_NOT_3 := $(shell python -c "import sys; print(\"%i\" % (sys.hexversion < 0x03000000))")
+
+	PYTHON_VERSION_NOT_3 := $(shell ${PYTHON_COMMAND} -c "import sys; print(\"%i\" % (sys.hexversion < 0x03000000))")
 	ifneq (${PYTHON_VERSION_NOT_3},0)
-		PYTHON_3_STATUS := $(shell python3 --version > /dev/null 2>&1 ; echo $$?)
+		PYTHON_COMMAND := python3
+		PYTHON_3_STATUS := $(shell ${PYTHON_COMMAND} --version > /dev/null 2>&1 ; echo $$?)
 		ifneq (${PYTHON_3_STATUS},0)
             $(error No valid Python 3.x interpreter found)
 		endif
-		PYTHON_COMMAND := python3
 	endif
+
+	PYTHON_DISTUTILS_STATUS := $(shell ${PYTHON_COMMAND} -c "import distutils.sysconfig" ; echo $$?)
+	ifneq (${PYTHON_DISTUTILS_STATUS},0)
+        $(error Python 3.x module "distutils.sysconfig" not found)
+	endif
+
+	PYTHON_NUMPY_STATUS := $(shell ${PYTHON_COMMAND} -c "import numpy" ; echo $$?)
+	ifneq (${PYTHON_NUMPY_STATUS},0)
+        $(error Python 3.x module "numpy" not found)
+	endif
+
 	BINARY            := ${PYTHON_MODULE_BINARY}
 	SOURCE_FILES      += ${PYTHON_MODULE_SOURCE}
 	OBJECT_FILES      += ${PYTHON_MODULE_OBJECT}

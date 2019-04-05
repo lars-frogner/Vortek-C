@@ -141,6 +141,21 @@ else
     cd -
     rm -r "${GLFW_DIR}"
 
+    echo "Checking for python3-distutils"
+    if ! dpkg -s python3-distutils > /dev/null 2>&1 ; then
+        echo "Installation of python3-distutils required"
+        echo "This will run the command \"sudo apt install python3-distutils\""
+        read -p "Do you want to continue? [y/N] " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing python3-distutils"
+            sudo apt install python3-distutils
+        else
+            echo "Aborted"
+            exit 1
+        fi
+    fi
+
 fi
 
 echo "Done"
