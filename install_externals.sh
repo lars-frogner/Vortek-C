@@ -10,7 +10,7 @@ if [ ${PLATFORM} == Darwin ]; then
     if ! brew --version > /dev/null 2>&1 ; then
         echo "Installation of brew required"
         echo "This will run the command \"ruby -e \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)\"\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing brew"
@@ -26,7 +26,7 @@ if [ ${PLATFORM} == Darwin ]; then
 
         echo "Installation of glfw3 required"
         echo "This will run the command \"brew install glfw3\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing glfw3"
@@ -54,7 +54,7 @@ else
     if ! curl --version > /dev/null 2>&1 ; then
         echo "Installation of curl required"
         echo "This will run the command \"sudo apt install curl\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing curl"
@@ -90,7 +90,7 @@ else
     if ! cmake --version > /dev/null 2>&1 ; then
         echo "Installation of cmake required"
         echo "This will run the command \"sudo apt install cmake\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing cmake"
@@ -105,7 +105,7 @@ else
     if ! dpkg -s xorg-dev > /dev/null ; then
         echo "Installation of xorg-dev required"
         echo "This will run the command \"sudo apt install xorg-dev\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing xorg-dev"
@@ -120,7 +120,7 @@ else
     if ! dpkg -s libglu1-mesa-dev > /dev/null ; then
         echo "Installation of libglu1-mesa-dev required"
         echo "This will run the command \"sudo apt install libglu1-mesa-dev\""
-        read -p "Do you want to continue? [y/N] " -n 1 -r
+        read -p "Do you want to continue? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
             echo "Installing libglu1-mesa-dev"
