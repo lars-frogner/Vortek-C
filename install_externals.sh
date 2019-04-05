@@ -141,6 +141,21 @@ else
     cd -
     rm -r "${GLFW_DIR}"
 
+    echo "Checking for python3-dev"
+    if ! dpkg -s python3-dev > /dev/null 2>&1 ; then
+        echo "Installation of python3-dev required"
+        echo "This will run the command \"sudo apt install python3-dev\""
+        read -p "Do you want to continue? [y/N] " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing python3-dev"
+            sudo apt install python3-dev
+        else
+            echo "Aborted"
+            exit 1
+        fi
+    fi
+
     echo "Checking for python3-distutils"
     if ! dpkg -s python3-distutils > /dev/null 2>&1 ; then
         echo "Installation of python3-distutils required"
@@ -150,6 +165,21 @@ else
         then
             echo "Installing python3-distutils"
             sudo apt install python3-distutils
+        else
+            echo "Aborted"
+            exit 1
+        fi
+    fi
+
+    echo "Checking for python3-numpy"
+    if ! dpkg -s python3-numpy > /dev/null 2>&1 ; then
+        echo "Installation of python3-numpy required"
+        echo "This will run the command \"sudo apt install python3-numpy\""
+        read -p "Do you want to continue? [y/N] " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "Installing python3-numpy"
+            sudo apt install python3-numpy
         else
             echo "Aborted"
             exit 1
