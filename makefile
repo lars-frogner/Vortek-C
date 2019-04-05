@@ -92,12 +92,12 @@ else
 		endif
 	endif
 
-	PYTHON_DISTUTILS_STATUS := $(shell ${PYTHON_COMMAND} -c "import distutils.sysconfig" ; echo $$?)
+	PYTHON_DISTUTILS_STATUS := $(shell ${PYTHON_COMMAND} -c "import distutils.sysconfig" > /dev/null 2>&1 ; echo $$?)
 	ifneq (${PYTHON_DISTUTILS_STATUS},0)
         $(error Python 3.x module "distutils.sysconfig" not found)
 	endif
 
-	PYTHON_NUMPY_STATUS := $(shell ${PYTHON_COMMAND} -c "import numpy" ; echo $$?)
+	PYTHON_NUMPY_STATUS := $(shell ${PYTHON_COMMAND} -c "import numpy" > /dev/null 2>&1 ; echo $$?)
 	ifneq (${PYTHON_NUMPY_STATUS},0)
         $(error Python 3.x module "numpy" not found)
 	endif
