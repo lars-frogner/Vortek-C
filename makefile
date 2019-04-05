@@ -77,19 +77,24 @@ ifdef MAKE_VORTEK_EXECUTABLE
 	SOURCE_FILES += ${EXECUTABLE_SOURCE}
 	OBJECT_FILES += ${EXECUTABLE_OBJECT}
 else
+	PYTHON_COMMAND := python
 	PYTHON_STATUS := $(shell python --version > /dev/null 2>&1 ; echo $$?)
 	ifneq (${PYTHON_STATUS},0)
-        $(error Python not found)
+        $(error No valid Python interpreter found)
 	endif
 	PYTHON_VERSION_NOT_3 := $(shell python -c "import sys; print(\"%i\" % (sys.hexversion < 0x03000000))")
 	ifneq (${PYTHON_VERSION_NOT_3},0)
-        $(error Requires Python 3.x)
+		PYTHON_3_STATUS := $(shell python3 --version > /dev/null 2>&1 ; echo $$?)
+		ifneq (${PYTHON_3_STATUS},0)
+            $(error No valid Python 3.x interpreter found)
+		endif
+		PYTHON_COMMAND := python3
 	endif
 	BINARY            := ${PYTHON_MODULE_BINARY}
 	SOURCE_FILES      += ${PYTHON_MODULE_SOURCE}
 	OBJECT_FILES      += ${PYTHON_MODULE_OBJECT}
-	HEADER_PATH_FLAGS += -I$(shell python -c "import distutils.sysconfig; print(distutils.sysconfig.get_python_inc())")
-	HEADER_PATH_FLAGS += -I$(shell python -c "import numpy; print(numpy.get_include())")/numpy
+	HEADER_PATH_FLAGS += -I$(shell ${PYTHON_COMMAND} -c "import distutils.sysconfig; print(distutils.sysconfig.get_python_inc())")
+	HEADER_PATH_FLAGS += -I$(shell ${PYTHON_COMMAND} -c "import numpy; print(numpy.get_include())")/numpy
 	COMPILATION_FLAGS += -fpic
 	LINKING_FLAGS     += -shared -undefined dynamic_lookup
 endif
