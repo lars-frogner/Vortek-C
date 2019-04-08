@@ -20,7 +20,7 @@
 #define INVISIBLE_ALPHA 1e-6f
 
 
-enum transfer_function_type {PIECEWISE_LINEAR, LOGARITHMIC};
+enum transfer_function_type {PIECEWISE_LINEAR, LOGARITHMIC, CUSTOM};
 
 typedef struct ValueLimits
 {
@@ -79,11 +79,16 @@ static void set_piecewise_linear_transfer_function_data(TransferFunction* transf
 static void set_logarithmic_transfer_function_data(TransferFunction* transfer_function, unsigned int component,
                                                    unsigned int start_node, unsigned int end_node,
                                                    float start_value, float end_value);
+static void set_custom_transfer_function_data(TransferFunction* transfer_function, unsigned int component,
+                                              unsigned int start_node, unsigned int end_node,
+                                              const float* values);
 
 static void compute_linear_array_segment(float* segment, size_t segment_length, unsigned int stride,
                                          float start_value, float end_value);
 static void compute_logarithmic_array_segment(float* segment, size_t segment_length, unsigned int stride,
                                               float start_value, float end_value);
+static void compute_custom_array_segment(float* segment, size_t segment_length, unsigned int stride,
+                                         const float* values);
 
 static const float NODE_RANGE_OFFSET = (float)TF_START_NODE;
 static const float NODE_RANGE_SIZE = (float)(TF_END_NODE - TF_START_NODE);
@@ -245,6 +250,25 @@ void set_logarithmic_transfer_function(const char* name, enum transfer_function_
         transfer_function->node_states[node][component] = 0;
 
     set_logarithmic_transfer_function_data(transfer_function, component, TF_START_NODE, TF_END_NODE, start_value, end_value);
+
+    sync_transfer_function(transfer_function_texture);
+}
+
+void set_custom_transfer_function(const char* name, enum transfer_function_component component,
+                                  const float* values)
+{
+    check(values);
+
+    TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
+    TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
+
+    transfer_function->types[component] = CUSTOM;
+
+    unsigned int node;
+    for (node = TF_START_NODE; node <= TF_END_NODE; node++)
+        transfer_function->node_states[node][component] = 0;
+
+    set_custom_transfer_function_data(transfer_function, component, TF_START_NODE, TF_END_NODE, values);
 
     sync_transfer_function(transfer_function_texture);
 }
@@ -583,13 +607,10 @@ static void reset_transfer_function_texture_data(TransferFunctionTexture* transf
     transfer_function->output[TF_LOWER_NODE][component] = 0.0f;
     transfer_function->output[TF_UPPER_NODE][component] = 1.0f;
 
-    const float start_value = (component == TF_ALPHA) ? 1.0f : 0.0f;
-    const float end_value = 1.0f;
-
     compute_linear_array_segment(transfer_function->output[TF_START_NODE] + component,
                                  TRANSFER_FUNCTION_SIZE - 2,
                                  TRANSFER_FUNCTION_COMPONENTS,
-                                 start_value, end_value);
+                                 0.0f, 1.0f);
 
     if (component == TF_ALPHA)
     {
@@ -664,6 +685,22 @@ static void set_logarithmic_transfer_function_data(TransferFunction* transfer_fu
                                       start_value, end_value);
 }
 
+static void set_custom_transfer_function_data(TransferFunction* transfer_function, unsigned int component,
+                                              unsigned int start_node, unsigned int end_node,
+                                              const float* values)
+{
+    assert(transfer_function);
+    assert(component < TRANSFER_FUNCTION_COMPONENTS);
+    assert(end_node > start_node);
+    assert(end_node < TRANSFER_FUNCTION_SIZE);
+    assert(values);
+
+    compute_custom_array_segment(transfer_function->output[start_node] + component,
+                                 end_node - start_node + 1,
+                                 TRANSFER_FUNCTION_COMPONENTS,
+                                 values);
+}
+
 static void compute_linear_array_segment(float* segment, size_t segment_length, unsigned int stride,
                                          float start_value, float end_value)
 {
@@ -690,4 +727,17 @@ static void compute_logarithmic_array_segment(float* segment, size_t segment_len
 
     for (i = 0; i < segment_length; i++)
         segment[i*stride] = log10f((float)i*scale + offset);
+}
+
+static void compute_custom_array_segment(float* segment, size_t segment_length, unsigned int stride,
+                                         const float* values)
+{
+    assert(segment);
+    assert(segment_length > 1);
+    assert(values);
+
+    size_t i;
+
+    for (i = 0; i < segment_length; i++)
+        segment[i*stride] = values[i];
 }

@@ -6,6 +6,7 @@
 
 #define TF_START_NODE 1
 #define TF_END_NODE 254
+#define TF_NUMBER_OF_INTERIOR_NODES 254
 
 void set_active_shader_program_for_transfer_functions(ShaderProgram* shader_program);
 
@@ -28,6 +29,9 @@ void remove_piecewise_linear_transfer_function_node(const char* name, enum trans
 
 void set_logarithmic_transfer_function(const char* name, enum transfer_function_component component,
                                        float start_value, float end_value);
+
+void set_custom_transfer_function(const char* name, enum transfer_function_component component,
+                                  const float* values);
 
 void set_transfer_function_lower_limit(const char* name, float lower_value);
 void set_transfer_function_upper_limit(const char* name, float upper_value);
