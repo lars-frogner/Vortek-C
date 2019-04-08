@@ -35,6 +35,7 @@ static ShaderProgram indicator_shader_program;
 
 static SingleFieldRenderingState single_field_rendering_state;
 
+static int rendering_required;
 static int has_data;
 
 
@@ -104,18 +105,32 @@ void cleanup_renderer(void)
     destroy_shader_program(&rendering_shader_program);
 }
 
-void renderer_update_callback(void)
+int perform_rendering(void)
 {
-    glClear(GL_COLOR_BUFFER_BIT);
+    const int was_rendered = rendering_required;
 
-    draw_active_bricked_field();
-    draw_clip_planes();
+    if (rendering_required)
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        draw_active_bricked_field();
+        draw_clip_planes();
+
+        rendering_required = 0;
+    }
+
+    return was_rendered;
 }
 
 void renderer_resize_callback(int width, int height)
 {
     update_camera_aspect_ratio((float)width/(float)height);
     glViewport(0, 0, width, height);
+}
+
+void require_rendering(void)
+{
+    rendering_required = 1;
 }
 
 int has_rendering_data(void)
@@ -147,13 +162,6 @@ void set_single_field_rendering_field(const char* field_name)
     set_max_clip_plane_origin_shifts(field->halfwidth, field->halfheight, field->halfdepth);
     set_active_bricked_field(get_field_texture_bricked_field(single_field_rendering_state.texture_name));
     set_plane_separation(0.5f);
-
-
-    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_RED, 0, 1);
-    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_GREEN, 0, 1);
-    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_BLUE, 0, 1);
-    set_logarithmic_transfer_function(single_field_rendering_state.TF_name, TF_ALPHA, 0, 1);
-    update_visibility_ratios(single_field_rendering_state.TF_name, get_field_texture_bricked_field(single_field_rendering_state.texture_name));
 
     has_data = 1;
 }

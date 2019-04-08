@@ -110,10 +110,10 @@ int step_mainloop(void)
     if (glfwWindowShouldClose(window.handle))
         return 0;
 
-    renderer_update_callback();
-    update_FPS(window.handle);
     glfwPollEvents();
-    glfwSwapBuffers(window.handle);
+
+    if (perform_rendering())
+        glfwSwapBuffers(window.handle);
 
     return 1;
 }
@@ -195,6 +195,7 @@ static void framebuffer_size_callback(GLFWwindow* window_handle, int width, int 
     window.width_pixels = width;
     window.height_pixels = height;
     renderer_resize_callback(width, height);
+    require_rendering();
 }
 
 static void window_size_callback(GLFWwindow* window_handle, int width, int height)
@@ -217,6 +218,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 camera_control_drag_end_callback();
                 disable_camera_control();
                 enable_clip_plane_control();
+                require_rendering();
                 break;
             }
             case GLFW_KEY_1:
@@ -228,6 +230,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 }
                 else
                     toggle_clip_plane_enabled_state(0);
+
+                require_rendering();
 
                 break;
             }
@@ -241,6 +245,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 else
                     toggle_clip_plane_enabled_state(1);
 
+                require_rendering();
+
                 break;
             }
             case GLFW_KEY_3:
@@ -252,6 +258,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 }
                 else
                     toggle_clip_plane_enabled_state(2);
+
+                require_rendering();
 
                 break;
             }
@@ -265,6 +273,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 else
                     toggle_clip_plane_enabled_state(3);
 
+                require_rendering();
+
                 break;
             }
             case GLFW_KEY_5:
@@ -276,6 +286,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 }
                 else
                     toggle_clip_plane_enabled_state(4);
+
+                require_rendering();
 
                 break;
             }
@@ -289,6 +301,8 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 else
                     toggle_clip_plane_enabled_state(5);
 
+                require_rendering();
+
                 break;
             }
             case GLFW_KEY_F:
@@ -296,6 +310,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_flip_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -304,6 +319,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_set_normal_to_x_axis_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -312,6 +328,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_set_normal_to_y_axis_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -320,6 +337,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_set_normal_to_z_axis_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -328,6 +346,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_set_normal_to_look_axis_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -336,10 +355,12 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_NONE)
                 {
                     toggle_field_outline_drawing();
+                    require_rendering();
                 }
                 else if (mods == GLFW_MOD_SHIFT)
                 {
                     clip_plane_control_reset_origin_shift_callback();
+                    require_rendering();
                 }
                 break;
             }
@@ -348,6 +369,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_NONE)
                 {
                     toggle_brick_outline_drawing();
+                    require_rendering();
                 }
                 break;
             }
@@ -356,6 +378,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 if (mods == GLFW_MOD_NONE)
                 {
                     toggle_sub_brick_outline_drawing();
+                    require_rendering();
                 }
                 break;
             }
@@ -372,6 +395,7 @@ static void keyboard_callback(GLFWwindow* window_handle, int key, int scancode, 
                 clip_plane_control_drag_end_callback();
                 disable_clip_plane_control();
                 enable_camera_control();
+                require_rendering();
                 break;
             }
             default:
@@ -393,6 +417,7 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
             glfwGetCursorPos(window_handle, &x_click_pos, &y_click_pos);
             camera_control_drag_start_callback(x_click_pos, y_click_pos);
             clip_plane_control_drag_start_callback(x_click_pos, y_click_pos);
+            require_rendering();
 
             mouse_is_pressed = 1;
         }
@@ -401,6 +426,7 @@ static void mouse_button_callback(GLFWwindow* window_handle, int button, int act
             mouse_is_pressed = 0;
             camera_control_drag_end_callback();
             clip_plane_control_drag_end_callback();
+            require_rendering();
         }
     }
 }
@@ -411,6 +437,7 @@ static void cursor_pos_callback(GLFWwindow* window_handle, double xpos, double y
     {
         camera_control_drag_callback(xpos, ypos);
         clip_plane_control_drag_callback(xpos, ypos);
+        require_rendering();
     }
 }
 
@@ -421,4 +448,5 @@ static void scroll_callback(GLFWwindow* window_handle, double xoffset, double yo
 
     camera_control_scroll_callback(yoffset);
     clip_plane_control_scroll_callback(yoffset);
+    require_rendering();
 }
