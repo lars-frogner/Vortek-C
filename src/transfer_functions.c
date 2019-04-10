@@ -64,7 +64,7 @@ static float compute_sub_brick_visibility_ratio(const TransferFunction* transfer
 static void transfer_transfer_function_texture(TransferFunctionTexture* transfer_function_texture);
 
 static void load_transfer_function(TransferFunctionTexture* transfer_function_texture);
-static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture);
+static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture, unsigned int offset, unsigned int size);
 static void sync_transfer_function_limits(TransferFunctionTexture* transfer_function_texture);
 
 static void clear_transfer_function_texture(TransferFunctionTexture* transfer_function_texture);
@@ -165,7 +165,7 @@ void reset_transfer_function(const char* name, enum transfer_function_component 
 {
     TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(name);
     reset_transfer_function_texture_data(transfer_function_texture, (unsigned int)component);
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, TF_LOWER_NODE, TRANSFER_FUNCTION_SIZE);
 }
 
 void set_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
@@ -195,7 +195,7 @@ void set_piecewise_linear_transfer_function_node(const char* name, enum transfer
         set_piecewise_linear_transfer_function_data(transfer_function, component, node, closest_node_above,
                                                     value, transfer_function->output[closest_node_above][component]);
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, closest_node_below + 1, closest_node_above - closest_node_below - 1);
 }
 
 void remove_piecewise_linear_transfer_function_node(const char* name, enum transfer_function_component component,
@@ -228,7 +228,7 @@ void remove_piecewise_linear_transfer_function_node(const char* name, enum trans
                                                 transfer_function->output[closest_node_below][component],
                                                 transfer_function->output[closest_node_above][component]);
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, closest_node_below + 1, closest_node_above - closest_node_below - 1);
 }
 
 void set_logarithmic_transfer_function(const char* name, enum transfer_function_component component,
@@ -251,7 +251,7 @@ void set_logarithmic_transfer_function(const char* name, enum transfer_function_
 
     set_logarithmic_transfer_function_data(transfer_function, component, TF_START_NODE, TF_END_NODE, start_value, end_value);
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, TF_LOWER_NODE, TRANSFER_FUNCTION_SIZE);
 }
 
 void set_custom_transfer_function(const char* name, enum transfer_function_component component,
@@ -270,7 +270,7 @@ void set_custom_transfer_function(const char* name, enum transfer_function_compo
 
     set_custom_transfer_function_data(transfer_function, component, TF_START_NODE, TF_END_NODE, values);
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, TF_LOWER_NODE, TRANSFER_FUNCTION_SIZE);
 }
 
 void set_transfer_function_lower_limit(const char* name, float lower_limit)
@@ -305,7 +305,7 @@ void set_transfer_function_lower_node_value(const char* name, enum transfer_func
     if (component == TF_ALPHA)
         transfer_function->limits.lower_visibility = value > INVISIBLE_ALPHA;
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, TF_LOWER_NODE, 1);
 }
 
 void set_transfer_function_upper_node_value(const char* name, enum transfer_function_component component, float value)
@@ -318,7 +318,7 @@ void set_transfer_function_upper_node_value(const char* name, enum transfer_func
     if (component == TF_ALPHA)
         transfer_function->limits.upper_visibility = value > INVISIBLE_ALPHA;
 
-    sync_transfer_function(transfer_function_texture);
+    sync_transfer_function(transfer_function_texture, TF_UPPER_NODE, 1);
 }
 
 void update_visibility_ratios(const char* transfer_function_name, BrickedField* bricked_field)
@@ -538,8 +538,10 @@ static void load_transfer_function(TransferFunctionTexture* transfer_function_te
     sync_transfer_function_limits(transfer_function_texture);
 }
 
-static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture)
+static void sync_transfer_function(TransferFunctionTexture* transfer_function_texture, unsigned int offset, unsigned int size)
 {
+    assert(offset + size <= TRANSFER_FUNCTION_SIZE);
+
     assert(active_shader_program);
     assert(transfer_function_texture);
 
@@ -548,8 +550,8 @@ static void sync_transfer_function(TransferFunctionTexture* transfer_function_te
 
     glTexSubImage1D(GL_TEXTURE_1D,
                     0,
-                    0,
-                    (GLsizei)TRANSFER_FUNCTION_SIZE,
+                    (GLint)offset,
+                    (GLsizei)size,
                     GL_RGBA,
                     GL_FLOAT,
                     (GLvoid*)transfer_function_texture->transfer_function.output);
