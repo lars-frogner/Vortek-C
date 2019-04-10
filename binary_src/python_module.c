@@ -21,7 +21,7 @@ static PyObject* vt_initialize(PyObject* self, PyObject* args);
 static PyObject* vt_set_brick_size_power_of_two(PyObject* self, PyObject* args);
 static PyObject* vt_set_minimum_sub_brick_size(PyObject* self, PyObject* args);
 
-static PyObject* vt_add_bifrost_field(PyObject* self, PyObject* args);
+static PyObject* vt_set_field_from_bifrost_file(PyObject* self, PyObject* args);
 
 static PyObject* vt_step(PyObject* self, PyObject* args);
 
@@ -86,7 +86,7 @@ static PyMethodDef vortek_method_definitions[] =
     {"initialize",                                        vt_initialize,                                   METH_VARARGS, NULL},
     {"set_brick_size_power_of_two",                       vt_set_brick_size_power_of_two,                  METH_VARARGS, NULL},
     {"set_minimum_sub_brick_size",                        vt_set_minimum_sub_brick_size,                   METH_VARARGS, NULL},
-    {"add_bifrost_field",                                 vt_add_bifrost_field,                            METH_VARARGS, NULL},
+    {"set_field_from_bifrost_file",                       vt_set_field_from_bifrost_file,                  METH_VARARGS, NULL},
     {"step",                                              vt_step,                                         METH_VARARGS, NULL},
     {"refresh_visibility",                                vt_refresh_visibility,                           METH_VARARGS, NULL},
     {"refresh_frame",                                     vt_refresh_frame,                                METH_VARARGS, NULL},
@@ -198,9 +198,9 @@ static PyObject* vt_set_minimum_sub_brick_size(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 }
 
-static PyObject* vt_add_bifrost_field(PyObject* self, PyObject* args)
+static PyObject* vt_set_field_from_bifrost_file(PyObject* self, PyObject* args)
 {
-    // void vt_add_bifrost_field(char* field_name, char* file_base_name);
+    // void vt_set_field_from_bifrost_file(char* field_name, char* file_base_name);
 
     char* field_name;
     char* file_base_name;
@@ -210,6 +210,10 @@ static PyObject* vt_add_bifrost_field(PyObject* self, PyObject* args)
 
     DynamicString data_path = create_string("%s.raw", file_base_name);
     DynamicString header_path = create_string("%s.dat", file_base_name);
+
+    Field* const existing_field = get_field_texture_field(get_single_field_rendering_texture_name());
+    if (existing_field)
+        destroy_field(existing_field->name.chars);
 
     set_single_field_rendering_field(create_field_from_bifrost_file(field_name, data_path.chars, header_path.chars));
 

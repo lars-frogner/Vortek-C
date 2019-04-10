@@ -4,6 +4,7 @@ from renderer import RenderingContext
 rendering_context = RenderingContext()
 
 import sys
+import os
 from PySide2 import QtCore, QtWidgets, QtUiTools, QtGui
 from matplotlib_canvas import MatplotlibCanvas
 from transfer_functions import RGBATransferFunction, HSVATransferFunction
@@ -38,7 +39,39 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__(parent)
         UiLoader().loadUi('interface.ui', self)
 
+        self.file_menu = FileMenu(self)
         self.context_stack = ContextStack(self)
+
+
+class FileMenu:
+
+    def __init__(self, window):
+
+        self.window = window
+        self.menubar = self.window.findChild(QtWidgets.QMenuBar, 'menubar')
+        self.widget = self.menubar.addMenu('File')
+
+        self.previous_path = QtCore.QDir.homePath()
+
+        self.setup_load_bifrost_field_action()
+
+    def setup_load_bifrost_field_action(self):
+
+        self.load_bifrost_field_action = self.widget.addAction('Load Bifrost field')
+
+        @QtCore.Slot()
+        def load_bifrost_field():
+            filename, _ = QtWidgets.QFileDialog.getOpenFileName(self.window,
+                                                                self.load_bifrost_field_action.text(),
+                                                                self.previous_path,
+                                                                'Prepped Bifrost data file (*.raw)')
+
+            if len(filename) > 0:
+                self.previous_path = os.path.split(filename)[0]
+                file_base_name = '.'.join(filename.split('.')[:-1])
+                rendering_context.set_field_from_bifrost_file('bifrost_field', file_base_name)
+
+        self.load_bifrost_field_action.triggered.connect(load_bifrost_field)
 
 
 class ContextStack:

@@ -8,7 +8,7 @@ def render(task_queue):
 
     functions = {'set_brick_size_power_of_two':               vortek.set_brick_size_power_of_two,
                  'set_minimum_sub_brick_size':                vortek.set_minimum_sub_brick_size,
-                 'add_bifrost_field':                         vortek.add_bifrost_field,
+                 'set_field_from_bifrost_file':               vortek.set_field_from_bifrost_file,
                  'refresh_visibility':                        vortek.refresh_visibility,
                  'refresh_frame':                             vortek.refresh_frame,
                  'enable_autorefresh':                        vortek.enable_autorefresh,
@@ -37,9 +37,6 @@ def render(task_queue):
         return
 
     vortek.initialize()
-
-    vortek.add_bifrost_field('temperature_field',
-                             '/Users/larsfrog/Code/output_visualization/no_ebeam/en024031_emer3.0sml_orig_631_tg')
 
     running = True
 
@@ -81,8 +78,8 @@ class RenderingContext:
     def set_minimum_sub_brick_size(self, min_sub_brick_size):
         self.task_queue.put(('set_minimum_sub_brick_size', (min_sub_brick_size,)))
 
-    def add_bifrost_field(self, field_name, file_base_name):
-        self.task_queue.put(('add_bifrost_field', (field_name, file_base_name)))
+    def set_field_from_bifrost_file(self, field_name, file_base_name):
+        self.task_queue.put(('set_field_from_bifrost_file', (field_name, file_base_name)))
 
     def refresh_visibility(self):
         self.task_queue.put(('refresh_visibility', ()))

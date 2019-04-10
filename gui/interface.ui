@@ -82,8 +82,16 @@
      <height>22</height>
     </rect>
    </property>
+   <property name="defaultUp">
+    <bool>false</bool>
+   </property>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionLoad_Bifrost_field">
+   <property name="text">
+    <string>Load Bifrost field</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>

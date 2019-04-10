@@ -152,10 +152,6 @@ void set_single_field_rendering_field(const char* field_name)
 {
     check(single_field_rendering_state.texture_name);
 
-    Field* const existing_field = get_field_texture_field(single_field_rendering_state.texture_name);
-    if (existing_field)
-        destroy_field(existing_field->name.chars);
-
     Field* const field = get_field(field_name);
 
     set_field_texture_field(single_field_rendering_state.texture_name, field);
