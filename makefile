@@ -16,24 +16,28 @@ CC = cc
 
 # Directories
 ROOT_DIR := .
-SRC_DIR := ${ROOT_DIR}/src
-BINARY_DIR := ${ROOT_DIR}/binary
-OBJ_DIR := ${ROOT_DIR}/obj
 INCLUDE_DIR := ${ROOT_DIR}/include
+SRC_DIR := ${ROOT_DIR}/src
+BINARY_SRC_DIR := ${ROOT_DIR}/binary_src
+OBJ_DIR := ${ROOT_DIR}/obj
+PYTHON_LIB_DIR := ${ROOT_DIR}/python_lib
+BIN_DIR := ${ROOT_DIR}/bin
 EXTERNAL_DIR := ${ROOT_DIR}/external
 DEP_DIR := ${ROOT_DIR}/.d
 
 # Executable binary
-EXECUTABLE_BINARY := ${ROOT_DIR}/vortek.x
-EXECUTABLE_SOURCE := ${BINARY_DIR}/executable.c
+EXECUTABLE_BINARY := ${BIN_DIR}/vortek.x
+EXECUTABLE_SOURCE := ${BINARY_SRC_DIR}/executable.c
 EXECUTABLE_OBJECT := ${OBJ_DIR}/executable.o
 
 # Python module binary
-PYTHON_MODULE_BINARY := ${ROOT_DIR}/vortek.so
-PYTHON_MODULE_SOURCE := ${BINARY_DIR}/python_module.c
+PYTHON_MODULE_BINARY := ${PYTHON_LIB_DIR}/vortek.so
+PYTHON_MODULE_SOURCE := ${BINARY_SRC_DIR}/python_module.c
 PYTHON_MODULE_OBJECT := ${OBJ_DIR}/python_module.o
 
 # Make sure required folders exist
+$(shell mkdir -p ${PYTHON_LIB_DIR} > /dev/null)
+$(shell mkdir -p ${BIN_DIR} > /dev/null)
 $(shell mkdir -p ${OBJ_DIR} > /dev/null)
 $(shell mkdir -p ${DEP_DIR} > /dev/null)
 
@@ -66,7 +70,7 @@ else
 	UNAME_S := $(shell uname -s)
 	ifeq (${UNAME_S},Linux)
 		OPERATING_SYSTEM      := linux
-		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU -Wl,-rpath='$$ORIGIN/${EXTERNAL_DIR}/lib'
+		LIBRARY_LINKING_FLAGS += -lm -lGL -lGLU -Wl,-rpath='$$ORIGIN/../${EXTERNAL_DIR}/lib'
 	endif
 	ifeq (${UNAME_S},Darwin)
 		OPERATING_SYSTEM  := macos
@@ -172,7 +176,7 @@ ${OBJ_DIR}/%.o : ${SRC_DIR}/%.c ${DEP_DIR}/%.d
 	${POSTCOMPILE}
 
 # Rule for compiling binary source
-${OBJ_DIR}/%.o : ${BINARY_DIR}/%.c ${DEP_DIR}/%.d
+${OBJ_DIR}/%.o : ${BINARY_SRC_DIR}/%.c ${DEP_DIR}/%.d
 	${COMPILE} -o $@ -c $<
 	${POSTCOMPILE}
 

@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, '../python_lib')
 import multiprocessing as mp
 import vortek
 
