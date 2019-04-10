@@ -92,7 +92,7 @@ static void compute_custom_array_segment(float* segment, size_t segment_length, 
 
 static const float NODE_RANGE_OFFSET = (float)TF_START_NODE;
 static const float NODE_RANGE_SIZE = (float)(TF_END_NODE - TF_START_NODE);
-static const float NODE_RANGE_NORM = 1.0f/NODE_RANGE_SIZE;
+static const float NODE_RANGE_NORM = 1.0f/(float)(TF_END_NODE - TF_START_NODE);
 
 static const float TEXTURE_COORDINATE_PAD = 1.0f/TRANSFER_FUNCTION_SIZE;
 
