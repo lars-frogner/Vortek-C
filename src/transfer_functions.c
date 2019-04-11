@@ -616,7 +616,7 @@ static void reset_transfer_function_texture_data(TransferFunctionTexture* transf
 
     if (component == TF_ALPHA)
     {
-        transfer_function->limits.lower_visibility = 1;
+        transfer_function->limits.lower_visibility = 0;
         transfer_function->limits.upper_visibility = 1;
     }
 }
