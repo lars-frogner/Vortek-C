@@ -279,8 +279,8 @@ static PyObject* vt_set_transfer_function_lower_limit(PyObject* self, PyObject* 
     if (!PyArg_ParseTuple(args, "f", &lower_limit))
         print_severe_message("Could not parse argument to function \"%s\".", "set_transfer_function_lower_limit");
 
-    set_transfer_function_lower_limit(get_single_field_rendering_TF_name(),
-                                      field_value_to_texture_value(get_single_field_rendering_texture_name(), lower_limit));
+    set_transfer_function_lower_limit(get_single_field_rendering_TF_name(), lower_limit);
+                                      //field_value_to_texture_value(get_single_field_rendering_texture_name(), lower_limit));
 
     maybe_refresh(1);
 
@@ -296,8 +296,8 @@ static PyObject* vt_set_transfer_function_upper_limit(PyObject* self, PyObject* 
     if (!PyArg_ParseTuple(args, "f", &upper_limit))
         print_severe_message("Could not parse argument to function \"%s\".", "set_transfer_function_upper_limit");
 
-    set_transfer_function_upper_limit(get_single_field_rendering_TF_name(),
-                                      field_value_to_texture_value(get_single_field_rendering_texture_name(), upper_limit));
+    set_transfer_function_upper_limit(get_single_field_rendering_TF_name(), upper_limit);
+                                      //field_value_to_texture_value(get_single_field_rendering_texture_name(), upper_limit));
 
     maybe_refresh(1);
 
@@ -557,7 +557,7 @@ static PyObject* vt_set_field_boundary_indicator_creation(PyObject* self, PyObje
     if (!PyArg_ParseTuple(args, "i", &state))
         print_severe_message("Could not parse argument to function \"%s\".", "set_field_boundary_indicator_creation");
 
-    if (state != 0 || state != 1)
+    if (state != 0 && state != 1)
         print_severe_message("Argument to function \"%s\" must be either 0 or 1.", "set_field_boundary_indicator_creation");
 
     set_field_boundary_indicator_creation(state);
@@ -574,7 +574,7 @@ static PyObject* vt_set_brick_boundary_indicator_creation(PyObject* self, PyObje
     if (!PyArg_ParseTuple(args, "i", &state))
         print_severe_message("Could not parse argument to function \"%s\".", "set_brick_boundary_indicator_creation");
 
-    if (state != 0 || state != 1)
+    if (state != 0 && state != 1)
         print_severe_message("Argument to function \"%s\" must be either 0 or 1.", "set_brick_boundary_indicator_creation");
 
     set_brick_boundary_indicator_creation(state);
@@ -591,7 +591,7 @@ static PyObject* vt_set_sub_brick_boundary_indicator_creation(PyObject* self, Py
     if (!PyArg_ParseTuple(args, "i", &state))
         print_severe_message("Could not parse argument to function \"%s\".", "set_sub_brick_boundary_indicator_creation");
 
-    if (state != 0 || state != 1)
+    if (state != 0 && state != 1)
         print_severe_message("Argument to function \"%s\" must be either 0 or 1.", "set_sub_brick_boundary_indicator_creation");
 
     set_sub_brick_boundary_indicator_creation(state);
