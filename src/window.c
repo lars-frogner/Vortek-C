@@ -28,12 +28,12 @@ typedef struct Window
     int height_pixels;
 } Window;
 
-typedef struct FPSCounter
+typedef struct FrameTimer
 {
     double previous_time;
     unsigned int frame_count;
-
-} FPSCounter;
+    char title[40];
+} FrameTimer;
 
 
 static void get_screen_resolution(int* width, int* height);
@@ -49,7 +49,7 @@ static void scroll_callback(GLFWwindow* window_handle, double xoffset, double yo
 
 static Window window = {NULL, 0, 0, 0, 0};
 
-static FPSCounter fps_counter;
+static FrameTimer frame_timer;
 
 static int mouse_is_pressed = 0;
 
@@ -101,8 +101,8 @@ void initialize_window(void)
 
 void initialize_mainloop(void)
 {
-    fps_counter.previous_time = glfwGetTime();
-    fps_counter.frame_count = 0;
+    frame_timer.previous_time = glfwGetTime();
+    frame_timer.frame_count = 0;
 }
 
 int step_mainloop(void)
@@ -112,8 +112,17 @@ int step_mainloop(void)
 
     glfwPollEvents();
 
-    if (perform_rendering())
+    const double start_time = glfwGetTime();
+    const int was_rendered = perform_rendering();
+    const double end_time = glfwGetTime();
+
+    if (was_rendered)
+    {
+        sprintf(frame_timer.title, "%s - %.2g ms", WINDOW_TITLE, 1000.0*(end_time - start_time));
+        glfwSetWindowTitle(window.handle, frame_timer.title);
+
         glfwSwapBuffers(window.handle);
+    }
 
     return 1;
 }
@@ -170,18 +179,17 @@ static void get_screen_resolution(int* width, int* height)
 
 static void update_FPS(GLFWwindow* window_handle)
 {
-    fps_counter.frame_count++;
+    frame_timer.frame_count++;
     const double current_time = glfwGetTime();
-    const double duration = current_time - fps_counter.previous_time;
+    const double duration = current_time - frame_timer.previous_time;
     if (duration >= 0.5f)
     {
-        const double fps = fps_counter.frame_count/duration;
-        char title[40];
-        sprintf(title, "%s - %.2g FPS", WINDOW_TITLE, fps);
-        glfwSetWindowTitle(window_handle, title);
+        const double fps = frame_timer.frame_count/duration;
+        sprintf(frame_timer.title, "%s - %.2g FPS", WINDOW_TITLE, fps);
+        glfwSetWindowTitle(window_handle, frame_timer.title);
 
-        fps_counter.previous_time = current_time;
-        fps_counter.frame_count = 0;
+        frame_timer.previous_time = current_time;
+        frame_timer.frame_count = 0;
     }
 }
 
