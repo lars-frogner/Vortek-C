@@ -323,6 +323,8 @@ void set_transfer_function_upper_node_value(const char* name, enum transfer_func
 
 void update_visibility_ratios(const char* transfer_function_name, BrickedField* bricked_field)
 {
+    check(bricked_field->field);
+
     TransferFunctionTexture* const transfer_function_texture = get_transfer_function_texture(transfer_function_name);
     TransferFunction* const transfer_function = &transfer_function_texture->transfer_function;
 
