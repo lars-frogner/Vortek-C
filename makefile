@@ -56,7 +56,7 @@ LIBRARY_LINKING_FLAGS := -lglfw
 COMPILATION_FLAGS := -march=native -mtune=native
 LINKING_FLAGS := -march=native -mtune=native
 
-DEBUGGING_COMPILATION_FLAGS := -g -O0 -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
+DEBUGGING_COMPILATION_FLAGS := -D DEBUG -g -O0 -W -Wall -fno-common -Wcast-align -Wredundant-decls -Wbad-function-cast -Wwrite-strings -Wstrict-prototypes -Wmissing-prototypes -Wextra -Wconversion -pedantic -Wno-unused-parameter -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
 DEBUGGING_LINKING_FLAGS := -fsanitize=address
 
 PERFORMANCE_COMPILATION_FLAGS := -O3 -ffast-math

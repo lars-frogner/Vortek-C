@@ -11,14 +11,14 @@
 
 
 // Define assert statement (only active in debug mode)
-#ifdef NDEBUG
-    #define assert(expression) ((void)0)
-#else
+#ifdef DEBUG
     #define assert(expression) \
         ((expression)? \
             (void)0 : \
             print_severe_message("assertion \"%s\" failed in %s, line %d.", \
                                  #expression, __FILE__, __LINE__))
+#else
+    #define assert(expression) ((void)0)
 #endif
 
 
