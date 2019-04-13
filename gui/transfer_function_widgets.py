@@ -1,0 +1,97 @@
+import rendering
+from PySide2 import QtCore, QtWidgets
+from gui_utils import LineEditSlider
+from matplotlib_canvas import MatplotlibCanvas
+from transfer_functions import RGBATransferFunction, HSVATransferFunction
+
+
+class TransferFunctionPage:
+
+    def __init__(self, window):
+        self.window = window
+
+        self.RGBA_transfer_function_tabs = RGBATransferFunctionTabs(self.window)
+        self.HSVA_transfer_function_tabs = HSVATransferFunctionTabs(self.window)
+        self.limit_controller = LimitController(self.window)
+
+
+class TransferFunctionTabs:
+
+    def __init__(self, window):
+        self.window = window
+        self.widget = None
+        self.tab_names = []
+        self.canvas_widgets = {}
+
+    def setup_matplotlib_canvas_widgets(self):
+        for idx, name in enumerate(self.tab_names):
+            canvas = MatplotlibCanvas(self.window)
+            lower_line_edit_slider = LineEditSlider(0, 0, 1, tick_position=QtWidgets.QSlider.TicksRight,
+                                                    value_update_callback=lambda value: rendering.session.update_transfer_function_lower_node_value(idx, value))
+
+            upper_line_edit_slider = LineEditSlider(1, 0, 1, tick_position=QtWidgets.QSlider.TicksLeft,
+                                                    value_update_callback=lambda value: rendering.session.update_transfer_function_upper_node_value(idx, value))
+            self.widget.addTab(TransferFunctionTabLayout(canvas, lower_line_edit_slider, upper_line_edit_slider), name)
+            self.canvas_widgets[name] = canvas
+
+
+class RGBATransferFunctionTabs(TransferFunctionTabs):
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.widget = self.window.findChild(QtWidgets.QTabWidget, 'RGBATransferFunctionTabWidget')
+        self.tab_names = ['Red', 'Green', 'Blue', 'Alpha']
+        self.setup_matplotlib_canvas_widgets()
+        self.transfer_function = RGBATransferFunction(*(self.canvas_widgets[name].axes for name in self.tab_names))
+
+
+class HSVATransferFunctionTabs(TransferFunctionTabs):
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.widget = self.window.findChild(QtWidgets.QTabWidget, 'HSVATransferFunctionTabWidget')
+        self.tab_names = ['Hue', 'Saturation', 'Value', 'Alpha']
+        self.setup_matplotlib_canvas_widgets()
+        self.transfer_function = HSVATransferFunction(*(self.canvas_widgets[name].axes for name in self.tab_names))
+
+
+class TransferFunctionTabLayout(QtWidgets.QWidget):
+
+    def __init__(self, canvas, lower_line_edit_slider, upper_line_edit_slider, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        layout = QtWidgets.QHBoxLayout()
+        layout.addWidget(EdgeNodeValueControlLayout(lower_line_edit_slider))
+        layout.addWidget(canvas)
+        layout.addWidget(EdgeNodeValueControlLayout(upper_line_edit_slider))
+        self.setLayout(layout)
+
+
+class EdgeNodeValueControlLayout(QtWidgets.QWidget):
+
+    def __init__(self, line_edit_slider, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        layout = QtWidgets.QVBoxLayout()
+        slider = line_edit_slider.get_slider()
+        line_edit = line_edit_slider.get_line_edit()
+        layout.addWidget(slider)
+        layout.addWidget(line_edit)
+        layout.setAlignment(slider, QtCore.Qt.AlignHCenter)
+        self.setLayout(layout)
+
+
+class LimitController:
+
+    def __init__(self, window):
+        self.window = window
+
+        lower_limit_line_edit = self.window.findChild(QtWidgets.QLineEdit, 'lowerLimitLineEdit')
+        upper_limit_line_edit = self.window.findChild(QtWidgets.QLineEdit, 'upperLimitLineEdit')
+        lower_limit_slider = self.window.findChild(QtWidgets.QSlider, 'lowerLimitSlider')
+        upper_limit_slider = self.window.findChild(QtWidgets.QSlider, 'upperLimitSlider')
+
+        self.lower_limit_line_edit_slider = LineEditSlider(0, 0, 1, line_edit=lower_limit_line_edit, slider=lower_limit_slider,
+                                                           value_update_callback=lambda value: rendering.session.set_transfer_function_lower_limit(value))
+        self.upper_limit_line_edit_slider = LineEditSlider(1, 0, 1, line_edit=upper_limit_line_edit, slider=upper_limit_slider,
+                                                           value_update_callback=lambda value: rendering.session.set_transfer_function_upper_limit(value))

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
+import rendering
 import matplotlib.pyplot as plt
 import matplotlib.lines as mpl_lines
 import matplotlib.patches as mpl_patches
@@ -388,6 +389,7 @@ class TransferFunctionComponent:
         if idx == 0 or idx == len(self.nodes) - 1:
             return
 
+        self.nodes[idx].end_motion()
         self.nodes[idx].remove()
         self.nodes[idx].upper_line.remove()
 
@@ -498,7 +500,6 @@ class TransferFunctionComponent:
 class RGBATransferFunction:
 
     def __init__(self,
-                 rendering_context,
                  red_axes, green_axes, blue_axes, alpha_axes,
                  aspect_ratio=0.5,
                  node_size=5e-2,
@@ -508,8 +509,6 @@ class RGBATransferFunction:
                  node_edgewidth=0.5,
                  line_width=1,
                  line_color='k'):
-
-        self.rendering_context = rendering_context
 
         kwargs = {'y_limits':        (0, 1),
                   'aspect_ratio':    aspect_ratio,
@@ -558,52 +557,52 @@ class RGBATransferFunction:
         self.update_other_background_components_for_alpha()
 
     def reset(self):
-        self.rendering_context.disable_autorefresh()
+        rendering.session.disable_autorefresh()
         self.make_red_component_piecewise()
         self.make_green_component_piecewise()
         self.make_blue_component_piecewise()
-        self.rendering_context.enable_autorefresh()
+        rendering.session.enable_autorefresh()
         self.make_alpha_component_piecewise()
 
     def make_red_component_piecewise(self):
         self.red_component.initialize_as_piecewise(0, 1)
         self.update_red_component_background()
-        self.rendering_context.reset_transfer_function_component(0)
+        rendering.session.reset_transfer_function_component(0)
 
     def make_green_component_piecewise(self):
         self.green_component.initialize_as_piecewise(0, 1)
         self.update_green_component_background()
-        self.rendering_context.reset_transfer_function_component(1)
+        rendering.session.reset_transfer_function_component(1)
 
     def make_blue_component_piecewise(self):
         self.blue_component.initialize_as_piecewise(0, 1)
         self.update_blue_component_background()
-        self.rendering_context.reset_transfer_function_component(2)
+        rendering.session.reset_transfer_function_component(2)
 
     def make_alpha_component_piecewise(self):
         self.alpha_component.initialize_as_piecewise(0, 1)
         self.update_alpha_component_background()
-        self.rendering_context.reset_transfer_function_component(3)
+        rendering.session.reset_transfer_function_component(3)
 
     def make_red_component_logarithmic(self):
         self.red_component.initialize_as_logarithmic()
         self.update_red_component_background()
-        self.rendering_context.use_logarithmic_transfer_function_component(0)
+        rendering.session.use_logarithmic_transfer_function_component(0)
 
     def make_green_component_logarithmic(self):
         self.green_component.initialize_as_logarithmic()
         self.update_green_component_background()
-        self.rendering_context.use_logarithmic_transfer_function_component(1)
+        rendering.session.use_logarithmic_transfer_function_component(1)
 
     def make_blue_component_logarithmic(self):
         self.blue_component.initialize_as_logarithmic()
         self.update_blue_component_background()
-        self.rendering_context.use_logarithmic_transfer_function_component(2)
+        rendering.session.use_logarithmic_transfer_function_component(2)
 
     def make_alpha_component_logarithmic(self):
         self.alpha_component.initialize_as_logarithmic()
         self.update_alpha_component_background()
-        self.rendering_context.use_logarithmic_transfer_function_component(3)
+        rendering.session.use_logarithmic_transfer_function_component(3)
 
     def update_other_background_components_for_red(self):
         self.red_component.background_data[:, :, 1] = self.green_data[np.newaxis, :]
@@ -664,16 +663,16 @@ class RGBATransferFunction:
     def update_node_for_renderer(self, component_idx, node, action, old_bin_idx):
 
         if action == 'remove':
-            self.rendering_context.remove_transfer_function_node(component_idx, node.bin_idx)
+            rendering.session.remove_transfer_function_node(component_idx, node.bin_idx)
         else:
             if old_bin_idx is None:
-                self.rendering_context.update_transfer_function_node_value(component_idx, node.bin_idx, node.center[1])
+                rendering.session.update_transfer_function_node_value(component_idx, node.bin_idx, node.center[1])
             else:
                 if node.bin_idx != old_bin_idx:
-                    self.rendering_context.disable_autorefresh()
-                    self.rendering_context.remove_transfer_function_node(component_idx, old_bin_idx)
-                    self.rendering_context.enable_autorefresh()
-                self.rendering_context.update_transfer_function_node_value(component_idx, node.bin_idx, node.center[1])
+                    rendering.session.disable_autorefresh()
+                    rendering.session.remove_transfer_function_node(component_idx, old_bin_idx)
+                    rendering.session.enable_autorefresh()
+                rendering.session.update_transfer_function_node_value(component_idx, node.bin_idx, node.center[1])
 
     def red_node_update_action(self, node, action, old_bin_idx):
         self.update_red_component_background()
@@ -695,7 +694,6 @@ class RGBATransferFunction:
 class HSVATransferFunction:
 
     def __init__(self,
-                 rendering_context,
                  hue_axes, saturation_axes, value_axes, alpha_axes,
                  aspect_ratio=0.5,
                  node_size=5e-2,
@@ -705,8 +703,6 @@ class HSVATransferFunction:
                  node_edgewidth=0.5,
                  line_width=1,
                  line_color='k'):
-
-        self.rendering_context = rendering_context
 
         kwargs = {'aspect_ratio':    aspect_ratio,
                   'node_size':       node_size,
@@ -774,12 +770,12 @@ class HSVATransferFunction:
         self.update_background_components_for_value()
         self.update_background_components_for_alpha()
 
-        self.rendering_context.disable_autorefresh()
-        self.rendering_context.reset_transfer_function_component(0)
-        self.rendering_context.reset_transfer_function_component(1)
-        self.rendering_context.reset_transfer_function_component(2)
-        self.rendering_context.enable_autorefresh()
-        self.rendering_context.reset_transfer_function_component(3)
+        rendering.session.disable_autorefresh()
+        rendering.session.reset_transfer_function_component(0)
+        rendering.session.reset_transfer_function_component(1)
+        rendering.session.reset_transfer_function_component(2)
+        rendering.session.enable_autorefresh()
+        rendering.session.reset_transfer_function_component(3)
 
     def make_hue_component_piecewise(self):
         self.hue_component.initialize_as_piecewise(0, 0)
@@ -799,7 +795,7 @@ class HSVATransferFunction:
     def make_alpha_component_piecewise(self):
         self.alpha_component.initialize_as_piecewise(0, 1)
         self.update_alpha_component_background()
-        self.rendering_context.reset_transfer_function_component(3)
+        rendering.session.reset_transfer_function_component(3)
 
     def make_saturation_component_logarithmic(self):
         self.saturation_component.initialize_as_logarithmic()
@@ -814,7 +810,7 @@ class HSVATransferFunction:
     def make_alpha_component_logarithmic(self):
         self.alpha_component.initialize_as_logarithmic()
         self.update_alpha_component_background()
-        self.rendering_context.use_logarithmic_transfer_function_component(3)
+        rendering.session.use_logarithmic_transfer_function_component(3)
 
     def compute_RGB_data(self):
         HSV_to_RGB(self.hue_data, self.saturation_data, self.value_data,
@@ -822,11 +818,11 @@ class HSVATransferFunction:
 
     def update_RGB_data_for_renderer(self):
         self.compute_RGB_data()
-        self.rendering_context.disable_autorefresh()
-        self.rendering_context.set_custom_transfer_function_component(0, self.red_data)
-        self.rendering_context.set_custom_transfer_function_component(1, self.green_data)
-        self.rendering_context.enable_autorefresh()
-        self.rendering_context.set_custom_transfer_function_component(2, self.blue_data)
+        rendering.session.disable_autorefresh()
+        rendering.session.set_custom_transfer_function_component(0, self.red_data)
+        rendering.session.set_custom_transfer_function_component(1, self.green_data)
+        rendering.session.enable_autorefresh()
+        rendering.session.set_custom_transfer_function_component(2, self.blue_data)
 
     def update_background_components_for_hue(self):
 
@@ -933,13 +929,13 @@ class HSVATransferFunction:
         self.update_alpha_component_background()
 
         if action == 'remove':
-            self.rendering_context.remove_transfer_function_node(3, node.bin_idx)
+            rendering.session.remove_transfer_function_node(3, node.bin_idx)
         else:
             if old_bin_idx is None:
-                self.rendering_context.update_transfer_function_node_value(3, node.bin_idx, node.center[1])
+                rendering.session.update_transfer_function_node_value(3, node.bin_idx, node.center[1])
             else:
                 if node.bin_idx != old_bin_idx:
-                    self.rendering_context.disable_autorefresh()
-                    self.rendering_context.remove_transfer_function_node(3, old_bin_idx)
-                    self.rendering_context.enable_autorefresh()
-                self.rendering_context.update_transfer_function_node_value(3, node.bin_idx, node.center[1])
+                    rendering.session.disable_autorefresh()
+                    rendering.session.remove_transfer_function_node(3, old_bin_idx)
+                    rendering.session.enable_autorefresh()
+                rendering.session.update_transfer_function_node_value(3, node.bin_idx, node.center[1])

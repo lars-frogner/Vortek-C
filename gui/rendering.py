@@ -1,71 +1,10 @@
 import sys
-sys.path.insert(0, '../python_lib')
 import multiprocessing as mp
+sys.path.insert(0, '../python_lib')
 import vortek
 
 
-def render(task_queue, status_queue):
-
-    status_queue.put('Stopped')
-
-    functions = {'set_brick_size_power_of_two':               vortek.set_brick_size_power_of_two,
-                 'set_minimum_sub_brick_size':                vortek.set_minimum_sub_brick_size,
-                 'set_field_from_bifrost_file':               vortek.set_field_from_bifrost_file,
-                 'refresh_visibility':                        vortek.refresh_visibility,
-                 'refresh_frame':                             vortek.refresh_frame,
-                 'enable_autorefresh':                        vortek.enable_autorefresh,
-                 'disable_autorefresh':                       vortek.disable_autorefresh,
-                 'set_transfer_function_lower_limit':         vortek.set_transfer_function_lower_limit,
-                 'set_transfer_function_upper_limit':         vortek.set_transfer_function_upper_limit,
-                 'update_transfer_function_lower_node_value': vortek.update_transfer_function_lower_node_value,
-                 'update_transfer_function_upper_node_value': vortek.update_transfer_function_upper_node_value,
-                 'update_transfer_function_node_value':       vortek.update_transfer_function_node_value,
-                 'remove_transfer_function_node':             vortek.remove_transfer_function_node,
-                 'use_logarithmic_transfer_function_compone': vortek.use_logarithmic_transfer_function_component,
-                 'set_custom_transfer_function_component':    vortek.set_custom_transfer_function_component,
-                 'reset_transfer_function_component':         vortek.reset_transfer_function_component,
-                 'set_camera_field_of_view':                  vortek.set_camera_field_of_view,
-                 'set_clip_plane_distances':                  vortek.set_clip_plane_distances,
-                 'use_perspective_camera_projection':         vortek.use_perspective_camera_projection,
-                 'use_orthographic_camera_projection':        vortek.use_orthographic_camera_projection,
-                 'set_lower_visibility_threshold':            vortek.set_lower_visibility_threshold,
-                 'set_upper_visibility_threshold':            vortek.set_upper_visibility_threshold,
-                 'set_field_boundary_indicator_creation':     vortek.set_field_boundary_indicator_creation,
-                 'set_brick_boundary_indicator_creation':     vortek.set_brick_boundary_indicator_creation,
-                 'set_sub_brick_boundary_indicator_creation': vortek.set_sub_brick_boundary_indicator_creation,
-                 'bring_window_to_front':                     vortek.bring_window_to_front}
-
-    while task_queue.get() != 'Terminate':
-
-        status = status_queue.get()
-
-        vortek.initialize()
-
-        running = True
-
-        while running:
-
-            while not task_queue.empty():
-
-                task = task_queue.get()
-
-                if task == 'Stop':
-                    running = False
-                    break
-                else:
-                    functions[task[0]](*task[1])
-
-            if running:
-                running = vortek.step()
-
-        vortek.cleanup()
-
-        status_queue.put('Stopped')
-
-    status = status_queue.get()
-
-
-class RenderingContext:
+class RenderingSession:
 
     def __init__(self):
         self.task_queue = mp.Queue()
@@ -193,3 +132,82 @@ class RenderingContext:
     def bring_window_to_front(self):
         assert self.is_rendering()
         self.task_queue.put(('bring_window_to_front', ()))
+
+
+def render(task_queue, status_queue):
+
+    status_queue.put('Stopped')
+
+    functions = {'set_brick_size_power_of_two':               vortek.set_brick_size_power_of_two,
+                 'set_minimum_sub_brick_size':                vortek.set_minimum_sub_brick_size,
+                 'set_field_from_bifrost_file':               vortek.set_field_from_bifrost_file,
+                 'refresh_visibility':                        vortek.refresh_visibility,
+                 'refresh_frame':                             vortek.refresh_frame,
+                 'enable_autorefresh':                        vortek.enable_autorefresh,
+                 'disable_autorefresh':                       vortek.disable_autorefresh,
+                 'set_transfer_function_lower_limit':         vortek.set_transfer_function_lower_limit,
+                 'set_transfer_function_upper_limit':         vortek.set_transfer_function_upper_limit,
+                 'update_transfer_function_lower_node_value': vortek.update_transfer_function_lower_node_value,
+                 'update_transfer_function_upper_node_value': vortek.update_transfer_function_upper_node_value,
+                 'update_transfer_function_node_value':       vortek.update_transfer_function_node_value,
+                 'remove_transfer_function_node':             vortek.remove_transfer_function_node,
+                 'use_logarithmic_transfer_function_compone': vortek.use_logarithmic_transfer_function_component,
+                 'set_custom_transfer_function_component':    vortek.set_custom_transfer_function_component,
+                 'reset_transfer_function_component':         vortek.reset_transfer_function_component,
+                 'set_camera_field_of_view':                  vortek.set_camera_field_of_view,
+                 'set_clip_plane_distances':                  vortek.set_clip_plane_distances,
+                 'use_perspective_camera_projection':         vortek.use_perspective_camera_projection,
+                 'use_orthographic_camera_projection':        vortek.use_orthographic_camera_projection,
+                 'set_lower_visibility_threshold':            vortek.set_lower_visibility_threshold,
+                 'set_upper_visibility_threshold':            vortek.set_upper_visibility_threshold,
+                 'set_field_boundary_indicator_creation':     vortek.set_field_boundary_indicator_creation,
+                 'set_brick_boundary_indicator_creation':     vortek.set_brick_boundary_indicator_creation,
+                 'set_sub_brick_boundary_indicator_creation': vortek.set_sub_brick_boundary_indicator_creation,
+                 'bring_window_to_front':                     vortek.bring_window_to_front}
+
+    while task_queue.get() != 'Terminate':
+
+        status = status_queue.get()
+
+        vortek.initialize()
+
+        running = True
+
+        while running:
+
+            while not task_queue.empty():
+
+                task = task_queue.get()
+
+                if task == 'Stop':
+                    running = False
+                    break
+                else:
+                    functions[task[0]](*task[1])
+
+            if running:
+                running = vortek.step()
+
+        vortek.cleanup()
+
+        status_queue.put('Stopped')
+
+    status = status_queue.get()
+
+
+# Global rendering session
+session = None
+
+
+def start_session():
+    # Initialize the global rendering session
+    global session
+    session = RenderingSession()
+
+
+def end_session():
+    # Cleanup the global rendering session
+    global session
+    assert session is not None
+    session.cleanup()
+    session = None
