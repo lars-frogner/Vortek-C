@@ -10,49 +10,50 @@ class TransferFunctionPage:
     def __init__(self, window):
         self.window = window
 
-        self.RGBA_transfer_function_tabs = RGBATransferFunctionTabs(self.window)
-        self.HSVA_transfer_function_tabs = HSVATransferFunctionTabs(self.window)
+        self.RGBA_transfer_function_tabs = TransferFunctionTabs(self.window, 'RGBA')
+        self.HSVA_transfer_function_tabs = TransferFunctionTabs(self.window, 'HSVA')
         self.limit_controller = LimitController(self.window)
 
 
 class TransferFunctionTabs:
 
-    def __init__(self, window):
+    def __init__(self, window, transfer_function_type):
         self.window = window
-        self.widget = None
-        self.tab_names = []
-        self.canvas_widgets = {}
 
-    def setup_matplotlib_canvas_widgets(self):
+        transfer_function_types = ['RGBA', 'HSVA']
+        assert transfer_function_type in transfer_function_types
+
+        transfer_function_classes = {'RGBA': RGBATransferFunction, 'HSVA': HSVATransferFunction}
+        transfer_function_class = transfer_function_classes[transfer_function_type]
+
+        self.widget = self.window.findChild(QtWidgets.QTabWidget, '{}TransferFunctionTabWidget'.format(transfer_function_type))
+
+        self.tab_names = transfer_function_class.get_component_names()
+
+        self.canvas_widgets = {name: MatplotlibCanvas(self.window) for name in self.tab_names}
+
+        self.transfer_function = transfer_function_class(*(self.canvas_widgets[name].axes for name in self.tab_names))
+
+        lower_slider_state = [(self.transfer_function.get_lower_value(idx),
+                               self.transfer_function.get_value_lower_limit(idx),
+                               self.transfer_function.get_value_upper_limit(idx))
+                              for idx in range(len(self.tab_names))]
+
+        upper_slider_state = [(self.transfer_function.get_upper_value(idx),
+                               self.transfer_function.get_value_lower_limit(idx),
+                               self.transfer_function.get_value_upper_limit(idx))
+                              for idx in range(len(self.tab_names))]
+
+
         for idx, name in enumerate(self.tab_names):
-            canvas = MatplotlibCanvas(self.window)
-            lower_line_edit_slider = LineEditSlider(0, 0, 1, tick_position=QtWidgets.QSlider.TicksRight,
-                                                    value_update_callback=lambda value: rendering.session.update_transfer_function_lower_node_value(idx, value))
 
-            upper_line_edit_slider = LineEditSlider(1, 0, 1, tick_position=QtWidgets.QSlider.TicksLeft,
-                                                    value_update_callback=lambda value: rendering.session.update_transfer_function_upper_node_value(idx, value))
-            self.widget.addTab(TransferFunctionTabLayout(canvas, lower_line_edit_slider, upper_line_edit_slider), name)
-            self.canvas_widgets[name] = canvas
+            lower_line_edit_slider = LineEditSlider(*lower_slider_state[idx], tick_position=QtWidgets.QSlider.TicksRight,
+                                                    value_update_callback=lambda value, idx=idx: self.transfer_function.set_lower_value(idx, value))
 
+            upper_line_edit_slider = LineEditSlider(*upper_slider_state[idx], tick_position=QtWidgets.QSlider.TicksLeft,
+                                                    value_update_callback=lambda value, idx=idx: self.transfer_function.set_upper_value(idx, value))
 
-class RGBATransferFunctionTabs(TransferFunctionTabs):
-
-    def __init__(self, window):
-        super().__init__(window)
-        self.widget = self.window.findChild(QtWidgets.QTabWidget, 'RGBATransferFunctionTabWidget')
-        self.tab_names = ['Red', 'Green', 'Blue', 'Alpha']
-        self.setup_matplotlib_canvas_widgets()
-        self.transfer_function = RGBATransferFunction(*(self.canvas_widgets[name].axes for name in self.tab_names))
-
-
-class HSVATransferFunctionTabs(TransferFunctionTabs):
-
-    def __init__(self, window):
-        super().__init__(window)
-        self.widget = self.window.findChild(QtWidgets.QTabWidget, 'HSVATransferFunctionTabWidget')
-        self.tab_names = ['Hue', 'Saturation', 'Value', 'Alpha']
-        self.setup_matplotlib_canvas_widgets()
-        self.transfer_function = HSVATransferFunction(*(self.canvas_widgets[name].axes for name in self.tab_names))
+            self.widget.addTab(TransferFunctionTabLayout(self.canvas_widgets[name], lower_line_edit_slider, upper_line_edit_slider), name)
 
 
 class TransferFunctionTabLayout(QtWidgets.QWidget):

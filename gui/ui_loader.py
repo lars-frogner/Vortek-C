@@ -9,7 +9,6 @@ class UiLoader(QtUiTools.QUiLoader):
     _parent_widget = None
 
     def createWidget(self, classname, parent=None, name=''):
-        print(name, classname, parent)
         if parent is self._parent_widget and self._baseinstance is not None:
             widget = self._baseinstance
         else:

@@ -49,6 +49,10 @@ class FileMenu:
                                                                 'Prepped Bifrost data file (*.raw)')
 
             if len(filename) > 0:
+
+                rendering.session.set_brick_boundary_indicator_creation(True)
+                rendering.session.set_sub_brick_boundary_indicator_creation(True)
+
                 self.previous_path = os.path.split(filename)[0]
                 file_base_name = '.'.join(filename.split('.')[:-1])
                 rendering.session.set_field_from_bifrost_file('bifrost_field', file_base_name)

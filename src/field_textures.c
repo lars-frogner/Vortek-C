@@ -183,7 +183,7 @@ static void transfer_scalar_field_texture(FieldTexture* field_texture)
 
         glTexImage3D(GL_TEXTURE_3D,
                      0,
-                     GL_COMPRESSED_RED,
+                     GL_RED,
                      (GLsizei)brick->padded_size[0],
                      (GLsizei)brick->padded_size[1],
                      (GLsizei)brick->padded_size[2],

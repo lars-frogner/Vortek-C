@@ -7,7 +7,7 @@ import matplotlib.patches as mpl_patches
 import bisect
 
 
-def HSV_to_RGB(hues, saturations, values, reds, greens, blues):
+def HSVs_to_RGBs(hues, saturations, values, reds, greens, blues):
 
     def helper(n, out):
         k = (n + hues/60) % 6
@@ -16,6 +16,14 @@ def HSV_to_RGB(hues, saturations, values, reds, greens, blues):
     helper(5, reds)
     helper(3, greens)
     helper(1, blues)
+
+def HSV_to_RGB(hue, saturation, value):
+
+    def helper(n):
+        k = (n + hue/60) % 6
+        return value*(1 - saturation*max(0, min(1, min(k, 4 - k))))
+
+    return helper(5), helper(3), helper(1)
 
 
 class TransferFunctionNode(mpl_patches.Ellipse):
@@ -266,6 +274,9 @@ class TransferFunctionComponent:
 
         self.is_piecewise = True
 
+        self.set_lower_value(start_value)
+        self.set_upper_value(end_value)
+
         start_node = TransferFunctionNode((self.x_limits[0], start_value),
                                           x_limits=self.x_limits, y_limits=self.y_limits,
                                           min_node_separation=self.min_node_separation,
@@ -315,6 +326,9 @@ class TransferFunctionComponent:
         self.remove_nodes()
 
         self.is_piecewise = False
+
+        self.set_lower_value(self.y_limits[0])
+        self.set_upper_value(self.y_limits[1])
 
         start_node = TransferFunctionNode((self.x_limits[0], 0),
                                           width=0, height=0,
@@ -416,6 +430,14 @@ class TransferFunctionComponent:
         self.nodes[-1].remove()
 
         self.nodes = []
+
+    def set_lower_value(self, lower_value):
+        assert lower_value >= self.y_limits[0]
+        self.lower_value = lower_value
+
+    def set_upper_value(self, upper_value):
+        assert upper_value <= self.y_limits[1]
+        self.upper_value = upper_value
 
     def evaluate(self, out=None):
 
@@ -541,6 +563,8 @@ class RGBATransferFunction:
         self.blue_component .initialize_as_piecewise(0, 1)
         self.alpha_component.initialize_as_piecewise(0, 1)
 
+        self.components = [self.red_component, self.green_component, self.blue_component, self.alpha_component]
+
         self.red_data   = self.red_component.evaluate()
         self.green_data = self.green_component.evaluate()
         self.blue_data  = self.blue_component.evaluate()
@@ -555,6 +579,10 @@ class RGBATransferFunction:
         self.update_other_background_components_for_green()
         self.update_other_background_components_for_blue()
         self.update_other_background_components_for_alpha()
+
+    @staticmethod
+    def get_component_names():
+        return ['Red', 'Green', 'Blue', 'Alpha']
 
     def reset(self):
         rendering.session.disable_autorefresh()
@@ -603,6 +631,26 @@ class RGBATransferFunction:
         self.alpha_component.initialize_as_logarithmic()
         self.update_alpha_component_background()
         rendering.session.use_logarithmic_transfer_function_component(3)
+
+    def set_lower_value(self, idx, lower_value):
+        self.components[idx].set_lower_value(lower_value)
+        rendering.session.update_transfer_function_lower_node_value(idx, lower_value)
+
+    def set_upper_value(self, idx, upper_value):
+        self.components[idx].set_upper_value(upper_value)
+        rendering.session.update_transfer_function_upper_node_value(idx, upper_value)
+
+    def get_value_lower_limit(self, idx):
+        return self.components[idx].y_limits[0]
+
+    def get_value_upper_limit(self, idx):
+        return self.components[idx].y_limits[1]
+
+    def get_lower_value(self, idx):
+        return self.components[idx].lower_value
+
+    def get_upper_value(self, idx):
+        return self.components[idx].upper_value
 
     def update_other_background_components_for_red(self):
         self.red_component.background_data[:, :, 1] = self.green_data[np.newaxis, :]
@@ -738,6 +786,8 @@ class HSVATransferFunction:
         self.value_component     .initialize_as_piecewise(0, 1)
         self.alpha_component     .initialize_as_piecewise(0, 1)
 
+        self.components = [self.hue_component, self.saturation_component, self.value_component, self.alpha_component]
+
         self.hue_data        = self.hue_component.evaluate()
         self.saturation_data = self.saturation_component.evaluate()
         self.value_data      = self.value_component.evaluate()
@@ -747,12 +797,21 @@ class HSVATransferFunction:
         self.green_data = np.zeros(self.hue_data.shape)
         self.blue_data  = np.zeros(self.hue_data.shape)
 
+        self.HSVA_lower_values = np.zeros(4)
+        self.HSVA_upper_values = np.zeros(4)
+        self.RGBA_lower_values = np.zeros(4)
+        self.RGBA_upper_values = np.zeros(4)
+
         self.alpha_component.background_data[:, :, 3] = self.alpha_component.pixel_y_coordinates[:, np.newaxis]
 
         self.update_background_components_for_hue()
         self.update_background_components_for_saturation()
         self.update_background_components_for_value()
         self.update_background_components_for_alpha()
+
+    @staticmethod
+    def get_component_names():
+        return ['Hue', 'Saturation', 'Value', 'Alpha']
 
     def reset(self):
         self.hue_component       .initialize_as_piecewise(0, 0)
@@ -812,9 +871,53 @@ class HSVATransferFunction:
         self.update_alpha_component_background()
         rendering.session.use_logarithmic_transfer_function_component(3)
 
+    def set_lower_value(self, idx, lower_value):
+
+        self.components[idx].set_lower_value(lower_value)
+
+        if idx != 3:
+            red_lower_value, green_lower_value, blue_lower_value = HSV_to_RGB(self.hue_component.lower_value,
+                                                                              self.saturation_component.lower_value,
+                                                                              self.value_component.lower_value)
+            rendering.session.disable_autorefresh()
+            rendering.session.update_transfer_function_lower_node_value(0, red_lower_value)
+            rendering.session.update_transfer_function_lower_node_value(1, green_lower_value)
+            rendering.session.enable_autorefresh()
+            rendering.session.update_transfer_function_lower_node_value(2, blue_lower_value)
+        else:
+            rendering.session.update_transfer_function_lower_node_value(idx, lower_value)
+
+    def set_upper_value(self, idx, upper_value):
+
+        self.components[idx].set_upper_value(upper_value)
+
+        if idx != 3:
+            red_upper_value, green_upper_value, blue_upper_value = HSV_to_RGB(self.hue_component.upper_value,
+                                                                              self.saturation_component.upper_value,
+                                                                              self.value_component.upper_value)
+            rendering.session.disable_autorefresh()
+            rendering.session.update_transfer_function_upper_node_value(0, red_upper_value)
+            rendering.session.update_transfer_function_upper_node_value(1, green_upper_value)
+            rendering.session.enable_autorefresh()
+            rendering.session.update_transfer_function_upper_node_value(2, blue_upper_value)
+        else:
+            rendering.session.update_transfer_function_upper_node_value(idx, upper_value)
+
+    def get_value_lower_limit(self, idx):
+        return self.components[idx].y_limits[0]
+
+    def get_value_upper_limit(self, idx):
+        return self.components[idx].y_limits[1]
+
+    def get_lower_value(self, idx):
+        return self.components[idx].lower_value
+
+    def get_upper_value(self, idx):
+        return self.components[idx].upper_value
+
     def compute_RGB_data(self):
-        HSV_to_RGB(self.hue_data, self.saturation_data, self.value_data,
-                   self.red_data, self.green_data, self.blue_data)
+        HSVs_to_RGBs(self.hue_data, self.saturation_data, self.value_data,
+                     self.red_data, self.green_data, self.blue_data)
 
     def update_RGB_data_for_renderer(self):
         self.compute_RGB_data()
@@ -826,34 +929,34 @@ class HSVATransferFunction:
 
     def update_background_components_for_hue(self):
 
-        HSV_to_RGB(self.hue_component.pixel_y_coordinates[:, np.newaxis],
-                   self.saturation_data[np.newaxis, :],
-                   self.value_data[np.newaxis, :],
-                   self.hue_component.background_data[:, :, 0],
-                   self.hue_component.background_data[:, :, 1],
-                   self.hue_component.background_data[:, :, 2])
+        HSVs_to_RGBs(self.hue_component.pixel_y_coordinates[:, np.newaxis],
+                     self.saturation_data[np.newaxis, :],
+                     self.value_data[np.newaxis, :],
+                     self.hue_component.background_data[:, :, 0],
+                     self.hue_component.background_data[:, :, 1],
+                     self.hue_component.background_data[:, :, 2])
 
         self.update_alpha_background_component_for_hue()
 
     def update_background_components_for_saturation(self):
 
-        HSV_to_RGB(self.hue_data[np.newaxis, :],
-                   self.saturation_component.pixel_y_coordinates[:, np.newaxis],
-                   self.value_data[np.newaxis, :],
-                   self.saturation_component.background_data[:, :, 0],
-                   self.saturation_component.background_data[:, :, 1],
-                   self.saturation_component.background_data[:, :, 2])
+        HSVs_to_RGBs(self.hue_data[np.newaxis, :],
+                     self.saturation_component.pixel_y_coordinates[:, np.newaxis],
+                     self.value_data[np.newaxis, :],
+                     self.saturation_component.background_data[:, :, 0],
+                     self.saturation_component.background_data[:, :, 1],
+                     self.saturation_component.background_data[:, :, 2])
 
         self.update_alpha_background_component_for_saturation()
 
     def update_background_components_for_value(self):
 
-        HSV_to_RGB(self.hue_data[np.newaxis, :],
-                   self.saturation_data[np.newaxis, :],
-                   self.value_component.pixel_y_coordinates[:, np.newaxis],
-                   self.value_component.background_data[:, :, 0],
-                   self.value_component.background_data[:, :, 1],
-                   self.value_component.background_data[:, :, 2])
+        HSVs_to_RGBs(self.hue_data[np.newaxis, :],
+                     self.saturation_data[np.newaxis, :],
+                     self.value_component.pixel_y_coordinates[:, np.newaxis],
+                     self.value_component.background_data[:, :, 0],
+                     self.value_component.background_data[:, :, 1],
+                     self.value_component.background_data[:, :, 2])
 
         self.update_alpha_background_component_for_value()
 
@@ -874,12 +977,12 @@ class HSVATransferFunction:
 
     def update_background_components_for_alpha(self):
 
-        HSV_to_RGB(self.hue_data[np.newaxis, :],
-                   self.saturation_data[np.newaxis, :],
-                   self.value_data[np.newaxis, :],
-                   self.alpha_component.background_data[:, :, 0],
-                   self.alpha_component.background_data[:, :, 1],
-                   self.alpha_component.background_data[:, :, 2])
+        HSVs_to_RGBs(self.hue_data[np.newaxis, :],
+                     self.saturation_data[np.newaxis, :],
+                     self.value_data[np.newaxis, :],
+                     self.alpha_component.background_data[:, :, 0],
+                     self.alpha_component.background_data[:, :, 1],
+                     self.alpha_component.background_data[:, :, 2])
 
         self.alpha_component.update_background_image()
         self.alpha_component.draw()

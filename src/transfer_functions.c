@@ -318,7 +318,7 @@ void set_transfer_function_upper_node_value(const char* name, enum transfer_func
     if (component == TF_ALPHA)
         transfer_function->limits.upper_visibility = value > INVISIBLE_ALPHA;
 
-    sync_transfer_function(transfer_function_texture, TF_UPPER_NODE, 1);
+    sync_transfer_function(transfer_function_texture, TF_UPPER_NODE-100, 101);
 }
 
 void update_visibility_ratios(const char* transfer_function_name, BrickedField* bricked_field)
