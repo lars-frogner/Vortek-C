@@ -124,6 +124,9 @@ class ContextStack:
 
 if __name__ == '__main__':
 
+    os.environ['QT_MAC_WANTS_LAYER'] = '1'
+    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
+
     app = QtWidgets.QApplication(sys.argv)
 
     mainwindow = MainWindow()
